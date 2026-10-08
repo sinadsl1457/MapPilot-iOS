@@ -3,6 +3,7 @@ import Foundation
 /// Kakao 로컬/모빌리티 REST API 클라이언트.
 struct KakaoAPIClient: Sendable {
     static let keywordSearchURL = URL(string: "https://dapi.kakao.com/v2/local/search/keyword.json")!
+    static let categorySearchURL = URL(string: "https://dapi.kakao.com/v2/local/search/category.json")!
     static let directionsURL = URL(string: "https://apis-navi.kakaomobility.com/v1/directions")!
     static let searchPageSize = 15
 
@@ -22,6 +23,18 @@ struct KakaoAPIClient: Sendable {
         }
         items.append(URLQueryItem(name: "size", value: String(Self.searchPageSize)))
         return try await get(Self.keywordSearchURL, queryItems: items)
+    }
+
+    /// 카테고리 검색. 응답 형식은 키워드 검색과 같다.
+    func searchCategory(code: String, center: GeoPoint, radiusMeters: Int) async throws -> KeywordSearchResponseDTO {
+        try await get(Self.categorySearchURL, queryItems: [
+            URLQueryItem(name: "category_group_code", value: code),
+            URLQueryItem(name: "x", value: String(center.longitude)),
+            URLQueryItem(name: "y", value: String(center.latitude)),
+            URLQueryItem(name: "radius", value: String(radiusMeters)),
+            URLQueryItem(name: "sort", value: "distance"),
+            URLQueryItem(name: "size", value: String(Self.searchPageSize)),
+        ])
     }
 
     func directions(from origin: GeoPoint, to destination: GeoPoint) async throws -> DirectionsResponseDTO {

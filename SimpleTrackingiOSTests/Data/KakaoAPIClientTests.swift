@@ -31,6 +31,23 @@ struct KakaoAPIClientTests {
         #expect(request.queryValue("y") == nil)
     }
 
+    @Test func categorySearchSendsCodeCenterAndRadius() async throws {
+        let recorder = RequestRecorder()
+        let session = StubURLProtocol.makeSession(status: 200, json: #"{"documents": []}"#, recorder: recorder)
+
+        _ = try await KakaoAPIClient(restAPIKey: "k", session: session)
+            .searchCategory(code: "CE7", center: Fixtures.cityHall, radiusMeters: 1_000)
+
+        let request = try #require(recorder.last)
+        #expect(request.url?.path() == "/v2/local/search/category.json")
+        #expect(request.queryValue("category_group_code") == "CE7")
+        #expect(request.queryValue("x") == "126.9784")
+        #expect(request.queryValue("y") == "37.5666")
+        #expect(request.queryValue("radius") == "1000")
+        #expect(request.queryValue("sort") == "distance")
+        #expect(request.queryValue("size") == "15")
+    }
+
     @Test func directionsUsesLongitudeLatitudeOrder() async throws {
         let recorder = RequestRecorder()
         let session = StubURLProtocol.makeSession(status: 200, json: #"{"routes": []}"#, recorder: recorder)

@@ -12,4 +12,10 @@ struct PlaceRepositoryImpl: PlaceRepository {
             .documents
             .compactMap(PlaceMapper.map)
     }
+
+    func searchPlaces(category: PlaceCategory, center: GeoPoint, radiusMeters: Int) async throws -> [Place] {
+        try await client.searchCategory(code: PlaceCategoryMapper.kakaoCode(category), center: center, radiusMeters: radiusMeters)
+            .documents
+            .compactMap(PlaceMapper.map)
+    }
 }
