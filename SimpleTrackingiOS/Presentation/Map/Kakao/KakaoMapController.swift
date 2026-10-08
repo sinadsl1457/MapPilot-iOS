@@ -14,6 +14,18 @@ final class KakaoMapController: NSObject {
         static let myLocationPoi = "myLocation.poi"
         static let dotStyle = "myLocation.dot"
         static let arrowStyle = "myLocation.arrow"
+        static let placeLayer = "places"
+        static let routeLayer = "route"
+        static let routeLine = "route.line"
+        static let routeStyle = "route.style"
+        static let routeEndpointLayer = "route.endpoints"
+        static let routeStartPoi = "route.start"
+        static let routeEndPoi = "route.end"
+        static let routeStartStyle = "route.start.style"
+        static let routeEndStyle = "route.end.style"
+        static func placeStyle(number: Int, selected: Bool) -> String {
+            "place.\(number)\(selected ? ".selected" : "")"
+        }
     }
 
     private static let markerAnimationMillis: UInt = 800
@@ -28,6 +40,12 @@ final class KakaoMapController: NSObject {
     private var map: KakaoMap? { controller?.getView(ID.mapView) as? KakaoMap }
     private var myLocationPoi: Poi?
     private var myLocationStyle: String?
+    private var registeredPlaceStyles: Set<String> = []
+    private var shownPlaceMarkers: [PlaceMarker] = []
+    private var shownSelectedPlaceID: String?
+    private var placeTapHandlers: [any DisposableEventHandler] = []
+    private var cameraStoppedHandler: (any DisposableEventHandler)?
+
     /// 마지막으로 적용한 회전값. 359° → 1°처럼 경계를 넘을 때 반대로 한 바퀴 돌지 않게 이어 붙인다.
     private var lastRoll: Double?
 
@@ -69,6 +87,9 @@ final class KakaoMapController: NSObject {
 
     func tearDown() {
         state.detach()
+        disposePlaceTapHandlers()
+        cameraStoppedHandler?.dispose()
+        cameraStoppedHandler = nil
         myLocationPoi = nil
         controller?.pauseEngine()
         controller?.resetEngine()
@@ -93,6 +114,75 @@ final class KakaoMapController: NSObject {
         labelManager.addPoiStyle(PoiStyle(styleID: ID.arrowStyle, styles: [
             PerLevelPoiStyle(iconStyle: PoiIconStyle(symbol: MyLocationMarkerImages.arrow()), level: 0),
         ]))
+    }
+
+    private func configurePlaceLayer(on map: KakaoMap) {
+        // 결과끼리 겹쳐도 모두 보이도록 경쟁하지 않는다. 내 위치 레이어보다 아래에 그린다.
+        _ = map.getLabelManager().addLabelLayer(option: LabelLayerOptions(
+            layerID: ID.placeLayer,
+            competitionType: .none,
+            competitionUnit: .symbolFirst,
+            orderType: .rank,
+            zOrder: 9_000
+        ))
+    }
+
+    private func configureRouteLayers(on map: KakaoMap) {
+        let routeManager = map.getRouteManager()
+        _ = routeManager.addRouteLayer(layerID: ID.routeLayer, zOrder: 8_000)
+        let tint = UIColor(red: 0x35 / 255, green: 0x6D / 255, blue: 0xF3 / 255, alpha: 1)
+        routeManager.addRouteStyleSet(RouteStyleSet(styleID: ID.routeStyle, styles: [
+            RouteStyle(styles: [PerLevelRouteStyle(width: 8, color: tint, strokeWidth: 2, strokeColor: .white, level: 0)]),
+        ]))
+
+        let labelManager = map.getLabelManager()
+        _ = labelManager.addLabelLayer(option: LabelLayerOptions(
+            layerID: ID.routeEndpointLayer,
+            competitionType: .none,
+            competitionUnit: .symbolFirst,
+            orderType: .rank,
+            zOrder: 9_500
+        ))
+        labelManager.addPoiStyle(PoiStyle(styleID: ID.routeStartStyle, styles: [
+            PerLevelPoiStyle(iconStyle: PoiIconStyle(symbol: RouteMarkerImages.start(), anchorPoint: CGPoint(x: 0.5, y: 1)), level: 0),
+        ]))
+        labelManager.addPoiStyle(PoiStyle(styleID: ID.routeEndStyle, styles: [
+            PerLevelPoiStyle(iconStyle: PoiIconStyle(symbol: RouteMarkerImages.end(), anchorPoint: CGPoint(x: 0.5, y: 1)), level: 0),
+        ]))
+    }
+
+    private func observeCamera(on map: KakaoMap) {
+        cameraStoppedHandler = map.addCameraStoppedEventHandler(target: self) { controller in
+            { _ in controller.reportCameraCenter() }
+        }
+        reportCameraCenter()
+    }
+
+    private func reportCameraCenter() {
+        guard let map else { return }
+        let rect = map.viewRect
+        let coordinate = map.getPosition(CGPoint(x: rect.midX, y: rect.midY)).wgsCoord
+        state.cameraDidStop(at: GeoPoint(latitude: coordinate.latitude, longitude: coordinate.longitude))
+    }
+
+    private func placeStyleID(number: Int, selected: Bool, labelManager: LabelManager) -> String {
+        let id = ID.placeStyle(number: number, selected: selected)
+        if !registeredPlaceStyles.contains(id) {
+            let icon = PoiIconStyle(symbol: PlaceMarkerImages.pin(number: number, selected: selected), anchorPoint: CGPoint(x: 0.5, y: 1))
+            labelManager.addPoiStyle(PoiStyle(styleID: id, styles: [PerLevelPoiStyle(iconStyle: icon, level: 0)]))
+            registeredPlaceStyles.insert(id)
+        }
+        return id
+    }
+
+    private func disposePlaceTapHandlers() {
+        placeTapHandlers.forEach { $0.dispose() }
+        placeTapHandlers.removeAll()
+    }
+
+    /// 선택된 마커가 다른 마커에 가려지지 않게 rank를 가장 높게 준다. 번호가 작을수록 위에 그린다.
+    private static func placeRank(number: Int, selected: Bool) -> Int {
+        selected ? 1_000 : 1_000 - number
     }
 
     private static func mapPoint(_ point: GeoPoint) -> MapPoint {
@@ -123,6 +213,88 @@ extension KakaoMapController: KakaoMapCommands {
             cameraUpdate: CameraUpdate.make(target: Self.mapPoint(point), zoomLevel: zoom, mapView: map),
             options: CameraAnimationOptions(autoElevation: false, consecutive: false, durationInMillis: Self.cameraAnimationMillis)
         )
+    }
+
+    /// 지점이 모두 보이게 맞춘다. 위·아래 UI가 지도를 가리는 만큼 영역을 넓혀 잡는다.
+    func fitCamera(to points: [GeoPoint], layout: MapFitLayout) {
+        guard let map else { return }
+        if points.count == 1, let point = points.first {
+            moveCamera(to: point, zoom: 16)
+            return
+        }
+        let latitudes = points.map(\.latitude)
+        let longitudes = points.map(\.longitude)
+        guard let minLat = latitudes.min(), let maxLat = latitudes.max(),
+              let minLon = longitudes.min(), let maxLon = longitudes.max() else { return }
+        let latSpan = max(maxLat - minLat, 0.002)
+        let lonSpan = max(maxLon - minLon, 0.002)
+        // 위도 범위 대비 위·아래로 더 잡을 비율
+        let (top, bottom): (Double, Double) = switch layout {
+        case .searchResults: (0.5, 1.2)
+        case .route: (0.6, 0.5)
+        }
+        let area = AreaRect(
+            southWest: MapPoint(longitude: minLon - lonSpan * 0.1, latitude: minLat - latSpan * bottom),
+            northEast: MapPoint(longitude: maxLon + lonSpan * 0.1, latitude: maxLat + latSpan * top)
+        )
+        map.animateCamera(
+            cameraUpdate: CameraUpdate.make(area: area, levelLimit: 17),
+            options: CameraAnimationOptions(autoElevation: false, consecutive: false, durationInMillis: Self.cameraAnimationMillis)
+        )
+    }
+
+    func showPlaceMarkers(_ markers: [PlaceMarker], selectedID: String?) {
+        guard let map, let layer = map.getLabelManager().getLabelLayer(layerID: ID.placeLayer) else { return }
+        let labelManager = map.getLabelManager()
+
+        // 같은 결과에서 선택만 바뀌었으면 스타일만 바꾼다.
+        if markers == shownPlaceMarkers {
+            for marker in markers where marker.id == shownSelectedPlaceID || marker.id == selectedID {
+                guard let poi = layer.getPoi(poiID: marker.id) else { continue }
+                let selected = marker.id == selectedID
+                poi.changeStyle(styleID: placeStyleID(number: marker.number, selected: selected, labelManager: labelManager))
+                poi.rank = Self.placeRank(number: marker.number, selected: selected)
+            }
+            shownSelectedPlaceID = selectedID
+            return
+        }
+
+        disposePlaceTapHandlers()
+        layer.clearAllItems()
+        for marker in markers {
+            let selected = marker.id == selectedID
+            let options = PoiOptions(styleID: placeStyleID(number: marker.number, selected: selected, labelManager: labelManager), poiID: marker.id)
+            options.rank = Self.placeRank(number: marker.number, selected: selected)
+            options.clickable = true
+            guard let poi = layer.addPoi(option: options, at: Self.mapPoint(marker.point)) else { continue }
+            placeTapHandlers.append(poi.addPoiTappedEventHandler(target: self) { controller in
+                { param in controller.state.placeMarkerTapped(id: param.poiItem.itemID) }
+            })
+            poi.show()
+        }
+        shownPlaceMarkers = markers
+        shownSelectedPlaceID = selectedID
+    }
+
+    func showRoute(_ points: [GeoPoint]?) {
+        guard let map,
+              let routeLayer = map.getRouteManager().getRouteLayer(layerID: ID.routeLayer),
+              let endpointLayer = map.getLabelManager().getLabelLayer(layerID: ID.routeEndpointLayer)
+        else { return }
+
+        routeLayer.clearAllRoutes()
+        endpointLayer.clearAllItems()
+        guard let points, points.count >= 2, let first = points.first, let last = points.last else { return }
+
+        let options = RouteOptions(routeID: ID.routeLine, styleID: ID.routeStyle, zOrder: 0)
+        options.segments = [RouteSegment(points: points.map(Self.mapPoint), styleIndex: 0)]
+        routeLayer.addRoute(option: options)?.show()
+
+        for (poiID, styleID, point) in [(ID.routeStartPoi, ID.routeStartStyle, first), (ID.routeEndPoi, ID.routeEndStyle, last)] {
+            let poiOptions = PoiOptions(styleID: styleID, poiID: poiID)
+            poiOptions.rank = 1
+            endpointLayer.addPoi(option: poiOptions, at: Self.mapPoint(point))?.show()
+        }
     }
 
     func updateMyLocation(_ location: UserLocation?) {
@@ -187,7 +359,10 @@ extension KakaoMapController: @preconcurrency MapControllerDelegate {
         if let container {
             map.viewRect = container.bounds
         }
+        configurePlaceLayer(on: map)
+        configureRouteLayers(on: map)
         configureMyLocationLayer(on: map)
+        observeCamera(on: map)
         state.attach(self)
     }
 

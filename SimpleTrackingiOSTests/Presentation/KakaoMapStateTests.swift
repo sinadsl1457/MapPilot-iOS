@@ -54,6 +54,71 @@ struct KakaoMapStateTests {
         #expect(map.locations == [location])
     }
 
+    @Test func fitBeforeReadyRunsOnAttachAndReplacesEarlierMove() {
+        let state = KakaoMapState()
+        state.moveCamera(to: Fixtures.cityHall, zoom: 15)
+        state.fitCamera(to: [Fixtures.cityHall, Fixtures.gangnamStation], layout: .route)
+
+        let map = FakeMap()
+        state.attach(map)
+
+        #expect(map.cameraMoves.isEmpty)
+        #expect(map.fits == [[Fixtures.cityHall, Fixtures.gangnamStation]])
+    }
+
+    @Test func fitWithNoPointsIsIgnored() {
+        let state = KakaoMapState()
+        let map = FakeMap()
+        state.attach(map)
+
+        state.fitCamera(to: [], layout: .searchResults)
+
+        #expect(map.fits.isEmpty)
+    }
+
+    @Test func markersBeforeReadyAreReplayedOnAttach() {
+        let state = KakaoMapState()
+        let markers = [PlaceMarker(id: "a", point: Fixtures.cityHall, number: 1)]
+        state.showPlaceMarkers(markers, selectedID: "a")
+
+        let map = FakeMap()
+        state.attach(map)
+
+        #expect(map.markerUpdates.last?.markers == markers)
+        #expect(map.markerUpdates.last?.selectedID == "a")
+    }
+
+    @Test func markerTapIsForwarded() {
+        let state = KakaoMapState()
+        var tapped: [String] = []
+        state.onPlaceTapped = { tapped.append($0) }
+
+        state.placeMarkerTapped(id: "a")
+
+        #expect(tapped == ["a"])
+    }
+
+    @Test func routeBeforeReadyIsReplayedOnAttach() {
+        let state = KakaoMapState()
+        state.showRoute([Fixtures.cityHall, Fixtures.gangnamStation])
+
+        let map = FakeMap()
+        state.attach(map)
+
+        #expect(map.routes.last == [Fixtures.cityHall, Fixtures.gangnamStation])
+    }
+
+    @Test func clearedRouteIsNotReplayed() {
+        let state = KakaoMapState()
+        state.showRoute([Fixtures.cityHall, Fixtures.gangnamStation])
+        state.showRoute(nil)
+
+        let map = FakeMap()
+        state.attach(map)
+
+        #expect(map.routes.last == .some(nil))
+    }
+
     @Test func attachClearsPreviousFailure() {
         let state = KakaoMapState()
         state.fail("인증 실패")
@@ -70,10 +135,26 @@ struct KakaoMapStateTests {
 @MainActor
 private final class FakeMap: KakaoMapCommands {
     var cameraMoves: [(point: GeoPoint, zoom: Int)] = []
+    var fits: [[GeoPoint]] = []
     var locations: [UserLocation?] = []
+    var markerUpdates: [(markers: [PlaceMarker], selectedID: String?)] = []
 
     func moveCamera(to point: GeoPoint, zoom: Int) {
         cameraMoves.append((point, zoom))
+    }
+
+    func fitCamera(to points: [GeoPoint], layout: MapFitLayout) {
+        fits.append(points)
+    }
+
+    func showPlaceMarkers(_ markers: [PlaceMarker], selectedID: String?) {
+        markerUpdates.append((markers, selectedID))
+    }
+
+    var routes: [[GeoPoint]?] = []
+
+    func showRoute(_ points: [GeoPoint]?) {
+        routes.append(points)
     }
 
     func updateMyLocation(_ location: UserLocation?) {
