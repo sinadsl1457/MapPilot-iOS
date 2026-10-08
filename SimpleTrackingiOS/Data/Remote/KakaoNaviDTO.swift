@@ -16,6 +16,12 @@ struct RouteDTO: Decodable, Sendable {
 struct RouteSummaryDTO: Decodable, Sendable {
     let distance: Int
     let duration: Int
+    let fare: CarFareDTO?
+}
+
+struct CarFareDTO: Decodable, Sendable {
+    let taxi: Int?
+    let toll: Int?
 }
 
 struct RouteSectionDTO: Decodable, Sendable {

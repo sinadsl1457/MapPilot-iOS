@@ -26,6 +26,11 @@ struct RouteSummaryCard: View {
                 Text("route.arrival \(ArrivalTime.string(after: route.durationSeconds))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                if let fares = fareLine(route) {
+                    Text(fares)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
             case let .failed(error):
                 RouteFailureText(error: error)
                     .frame(height: 60, alignment: .leading)
@@ -47,6 +52,20 @@ struct RouteSummaryCard: View {
                 .shadow(color: .black.opacity(0.12), radius: 10, y: -2)
                 .ignoresSafeArea(edges: .bottom)
         )
+    }
+}
+
+private extension RouteSummaryCard {
+    /// "택시 약 26,800원 · 통행료 1,200원". 통행료가 없으면 생략한다.
+    func fareLine(_ route: Route) -> String? {
+        var parts: [String] = []
+        if let taxi = route.taxiFare, taxi > 0 {
+            parts.append(String(localized: "route.fare.taxi \(taxi.formatted())"))
+        }
+        if let toll = route.tollFare, toll > 0 {
+            parts.append(String(localized: "route.fare.toll \(toll.formatted())"))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 

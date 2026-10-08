@@ -28,7 +28,7 @@ struct RouteRepositoryImplTests {
           "trans_id": "t",
           "routes": [{
             "result_code": 0, "result_msg": "길찾기 성공",
-            "summary": {"distance": 9120, "duration": 1500},
+            "summary": {"distance": 9120, "duration": 1500, "fare": {"taxi": 13400, "toll": 0}},
             "sections": [{"distance": 9120, "duration": 1500, "roads": [
               {"name": "세종대로", "vertexes": [126.9785, 37.5660, 126.9790, 37.5650]},
               {"name": "강남대로", "vertexes": [127.0270, 37.4990]}
@@ -48,7 +48,9 @@ struct RouteRepositoryImplTests {
                 Fixtures.gangnamStation,
             ],
             distanceMeters: 9120,
-            durationSeconds: 1500
+            durationSeconds: 1500,
+            taxiFare: 13_400,
+            tollFare: 0
         ))
     }
 }

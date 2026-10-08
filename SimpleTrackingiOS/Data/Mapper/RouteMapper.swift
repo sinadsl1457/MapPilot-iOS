@@ -10,7 +10,9 @@ enum RouteMapper {
         return Route(
             points: [origin] + roadPoints + [destination],
             distanceMeters: summary.distance,
-            durationSeconds: summary.duration
+            durationSeconds: summary.duration,
+            taxiFare: summary.fare?.taxi,
+            tollFare: summary.fare?.toll
         )
     }
 

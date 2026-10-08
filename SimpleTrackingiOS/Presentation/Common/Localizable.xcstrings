@@ -365,6 +365,28 @@
         }
       }
     },
+    "route.fare.taxi %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "택시 약 %@원"
+          }
+        }
+      }
+    },
+    "route.fare.toll %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "통행료 %@원"
+          }
+        }
+      }
+    },
     "route.loading": {
       "extractionState": "manual",
       "localizations": {

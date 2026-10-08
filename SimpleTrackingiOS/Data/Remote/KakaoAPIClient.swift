@@ -43,7 +43,8 @@ struct KakaoAPIClient: Sendable {
         try await get(Self.directionsURL, queryItems: [
             URLQueryItem(name: "origin", value: Self.lonLat(origin)),
             URLQueryItem(name: "destination", value: Self.lonLat(destination)),
-            URLQueryItem(name: "priority", value: "DISTANCE"),
+            // 최단 거리(DISTANCE)는 막히는 길로 돌아 실제로 더 오래 걸릴 수 있어 카카오 기본값인 추천 경로를 쓴다.
+            URLQueryItem(name: "priority", value: "RECOMMEND"),
         ])
     }
 

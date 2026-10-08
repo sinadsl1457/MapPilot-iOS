@@ -24,7 +24,7 @@ struct RouteMapperTests {
         let dto = RouteDTO(
             resultCode: 0,
             resultMsg: "길찾기 성공",
-            summary: RouteSummaryDTO(distance: 1_500, duration: 300),
+            summary: RouteSummaryDTO(distance: 1_500, duration: 300, fare: CarFareDTO(taxi: 5_600, toll: 1_200)),
             sections: [
                 RouteSectionDTO(roads: [RoadDTO(vertexes: [127.1, 37.1]), RoadDTO(vertexes: [127.2, 37.2])]),
                 RouteSectionDTO(roads: [RoadDTO(vertexes: [127.3, 37.3])]),
@@ -42,6 +42,8 @@ struct RouteMapperTests {
         ])
         #expect(route.distanceMeters == 1_500)
         #expect(route.durationSeconds == 300)
+        #expect(route.taxiFare == 5_600)
+        #expect(route.tollFare == 1_200)
     }
 
     @Test func missingSummaryIsNil() {

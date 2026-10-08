@@ -60,7 +60,7 @@ struct KakaoAPIClientTests {
         #expect(request.url?.path() == "/v1/directions")
         #expect(request.queryValue("origin") == "126.9784,37.5666")
         #expect(request.queryValue("destination") == "127.02764,37.49794")
-        #expect(request.queryValue("priority") == "DISTANCE")
+        #expect(request.queryValue("priority") == "RECOMMEND")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "KakaoAK k")
     }
 }
