@@ -16,8 +16,7 @@ final class KakaoMapController: NSObject {
         static let arrowStyle = "myLocation.arrow"
         static let placeLayer = "places"
         static let routeLayer = "route"
-        static let routeLine = "route.line"
-        static let routeStyle = "route.style"
+        static func routeStyle(_ kind: RouteLine.Kind) -> String { "route.style.\(kind)" }
         static let routeEndpointLayer = "route.endpoints"
         static let routeStartPoi = "route.start"
         static let routeEndPoi = "route.end"
@@ -45,6 +44,7 @@ final class KakaoMapController: NSObject {
     private var shownSelectedPlaceID: String?
     private var placeTapHandlers: [any DisposableEventHandler] = []
     private var cameraStoppedHandler: (any DisposableEventHandler)?
+    private var routeDrawCount = 0
 
     /// 마지막으로 적용한 회전값. 359° → 1°처럼 경계를 넘을 때 반대로 한 바퀴 돌지 않게 이어 붙인다.
     private var lastRoll: Double?
@@ -130,10 +130,18 @@ final class KakaoMapController: NSObject {
     private func configureRouteLayers(on map: KakaoMap) {
         let routeManager = map.getRouteManager()
         _ = routeManager.addRouteLayer(layerID: ID.routeLayer, zOrder: 8_000)
-        let tint = UIColor(red: 0x35 / 255, green: 0x6D / 255, blue: 0xF3 / 255, alpha: 1)
-        routeManager.addRouteStyleSet(RouteStyleSet(styleID: ID.routeStyle, styles: [
-            RouteStyle(styles: [PerLevelRouteStyle(width: 8, color: tint, strokeWidth: 2, strokeColor: .white, level: 0)]),
-        ]))
+        // 종류마다 스타일 세트를 따로 두고, 구간 하나를 경로 하나로 그린다.
+        let styles: [(RouteLine.Kind, UIColor, UInt)] = [
+            (.car, RouteLineColors.car, 8),
+            (.walk, RouteLineColors.walk, 5),
+            (.bus, RouteLineColors.bus, 8),
+            (.subway, RouteLineColors.subway, 8),
+        ]
+        for (kind, color, width) in styles {
+            routeManager.addRouteStyleSet(RouteStyleSet(styleID: ID.routeStyle(kind), styles: [
+                RouteStyle(styles: [PerLevelRouteStyle(width: width, color: color, strokeWidth: 2, strokeColor: .white, level: 0)]),
+            ]))
+        }
 
         let labelManager = map.getLabelManager()
         _ = labelManager.addLabelLayer(option: LabelLayerOptions(
@@ -231,7 +239,8 @@ extension KakaoMapController: KakaoMapCommands {
         // 위도 범위 대비 위·아래로 더 잡을 비율
         let (top, bottom): (Double, Double) = switch layout {
         case .searchResults: (0.5, 1.2)
-        case .route: (0.6, 0.5)
+        case .route: (0.8, 0.5)
+        case .routeWithSheet: (0.9, 1.3)
         }
         let area = AreaRect(
             southWest: MapPoint(longitude: minLon - lonSpan * 0.1, latitude: minLat - latSpan * bottom),
@@ -276,7 +285,7 @@ extension KakaoMapController: KakaoMapCommands {
         shownSelectedPlaceID = selectedID
     }
 
-    func showRoute(_ points: [GeoPoint]?) {
+    func showRoute(_ overlay: RouteOverlay?) {
         guard let map,
               let routeLayer = map.getRouteManager().getRouteLayer(layerID: ID.routeLayer),
               let endpointLayer = map.getLabelManager().getLabelLayer(layerID: ID.routeEndpointLayer)
@@ -284,13 +293,17 @@ extension KakaoMapController: KakaoMapCommands {
 
         routeLayer.clearAllRoutes()
         endpointLayer.clearAllItems()
-        guard let points, points.count >= 2, let first = points.first, let last = points.last else { return }
+        guard let overlay else { return }
 
-        let options = RouteOptions(routeID: ID.routeLine, styleID: ID.routeStyle, zOrder: 0)
-        options.segments = [RouteSegment(points: points.map(Self.mapPoint), styleIndex: 0)]
-        routeLayer.addRoute(option: options)?.show()
+        // 지우기가 비동기라 같은 ID를 바로 다시 쓰면 충돌할 수 있어 그릴 때마다 새 ID를 쓴다.
+        routeDrawCount += 1
+        for (index, line) in overlay.lines.enumerated() where line.points.count >= 2 {
+            let options = RouteOptions(routeID: "route.\(routeDrawCount).\(index)", styleID: ID.routeStyle(line.kind), zOrder: index)
+            options.segments = [RouteSegment(points: line.points.map(Self.mapPoint), styleIndex: 0)]
+            routeLayer.addRoute(option: options)?.show()
+        }
 
-        for (poiID, styleID, point) in [(ID.routeStartPoi, ID.routeStartStyle, first), (ID.routeEndPoi, ID.routeEndStyle, last)] {
+        for (poiID, styleID, point) in [(ID.routeStartPoi, ID.routeStartStyle, overlay.start), (ID.routeEndPoi, ID.routeEndStyle, overlay.end)] {
             let poiOptions = PoiOptions(styleID: styleID, poiID: poiID)
             poiOptions.rank = 1
             endpointLayer.addPoi(option: poiOptions, at: Self.mapPoint(point))?.show()

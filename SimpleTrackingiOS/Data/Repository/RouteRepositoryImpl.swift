@@ -19,4 +19,20 @@ struct RouteRepositoryImpl: RouteRepository {
         }
         return mapped
     }
+
+    func findWalkingRoute(from origin: GeoPoint, to destination: GeoPoint) async throws -> Route {
+        let response = try await client.walkingRoute(from: origin, to: destination)
+        guard response.status == "OK", let route = response.route else {
+            throw RoutingMapper.error(forStatus: response.status)
+        }
+        return RoutingMapper.walkingRoute(route, origin: origin, destination: destination)
+    }
+
+    func findTransitRoutes(from origin: GeoPoint, to destination: GeoPoint) async throws -> [TransitRoute] {
+        let response = try await client.transitRoutes(from: origin, to: destination)
+        guard response.status == "OK" else {
+            throw RoutingMapper.error(forStatus: response.status)
+        }
+        return (response.routes ?? []).map(RoutingMapper.transitRoute)
+    }
 }

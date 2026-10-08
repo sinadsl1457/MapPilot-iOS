@@ -9,12 +9,33 @@ struct PlaceMarker: Equatable, Sendable {
     let number: Int
 }
 
+/// 지도에 그릴 경로 선 한 구간. 종류마다 색이 다르다.
+struct RouteLine: Equatable, Sendable {
+    enum Kind: Equatable, Sendable {
+        case car, walk, bus, subway
+    }
+
+    let kind: Kind
+    let points: [GeoPoint]
+}
+
+/// 지도에 그릴 경로 전체: 선들과 출발·도착 마커 위치.
+struct RouteOverlay: Equatable, Sendable {
+    let lines: [RouteLine]
+    let start: GeoPoint
+    let end: GeoPoint
+
+    var allPoints: [GeoPoint] { [start] + lines.flatMap(\.points) + [end] }
+}
+
 /// 카메라를 여러 지점에 맞출 때 화면의 어떤 부분이 가려지는지.
 enum MapFitLayout: Equatable, Sendable {
     /// 위: 검색창+칩, 아래: 큰 하단 시트
     case searchResults
-    /// 위: 출발·도착 카드, 아래: 작은 요약 카드
+    /// 위: 출발·도착 카드와 탭, 아래: 작은 요약 카드
     case route
+    /// 위: 출발·도착 카드와 탭, 아래: 큰 하단 시트(대중교통 목록)
+    case routeWithSheet
 }
 
 /// 지도에 내리는 명령. `KakaoMapController`가 구현하고, 테스트에서는 fake로 바꾼다.
@@ -25,7 +46,7 @@ protocol KakaoMapCommands: AnyObject {
     func updateMyLocation(_ location: UserLocation?)
     func showPlaceMarkers(_ markers: [PlaceMarker], selectedID: String?)
     /// 경로 선과 출발·도착 마커. nil이면 지운다.
-    func showRoute(_ points: [GeoPoint]?)
+    func showRoute(_ overlay: RouteOverlay?)
 }
 
 /// SwiftUI(선언형)와 지도 SDK(명령형) 사이의 다리.
@@ -45,7 +66,7 @@ final class KakaoMapState {
     @ObservationIgnored private var myLocation: UserLocation?
     @ObservationIgnored private var placeMarkers: [PlaceMarker] = []
     @ObservationIgnored private var selectedPlaceID: String?
-    @ObservationIgnored private var routePoints: [GeoPoint]?
+    @ObservationIgnored private var routeOverlay: RouteOverlay?
 
     private enum PendingCamera {
         case move(GeoPoint, zoom: Int)
@@ -83,9 +104,9 @@ final class KakaoMapState {
         map?.showPlaceMarkers(markers, selectedID: selectedID)
     }
 
-    func showRoute(_ points: [GeoPoint]?) {
-        routePoints = points
-        map?.showRoute(points)
+    func showRoute(_ overlay: RouteOverlay?) {
+        routeOverlay = overlay
+        map?.showRoute(overlay)
     }
 
     // MARK: - KakaoMapController 전용
@@ -95,7 +116,7 @@ final class KakaoMapState {
         loadFailure = nil
         map.updateMyLocation(myLocation)
         map.showPlaceMarkers(placeMarkers, selectedID: selectedPlaceID)
-        map.showRoute(routePoints)
+        map.showRoute(routeOverlay)
         switch pendingCamera {
         case let .move(point, zoom): map.moveCamera(to: point, zoom: zoom)
         case let .fit(points, layout): map.fitCamera(to: points, layout: layout)

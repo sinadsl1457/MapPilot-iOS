@@ -11,6 +11,7 @@ struct MapScreen: View {
     @State private var sheetDetent: BottomSheetDetent = .medium
     @State private var sheetHeight: CGFloat = 0
     @State private var routeCardHeight: CGFloat = 0
+    @State private var transitSheetDetent: BottomSheetDetent = .medium
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
 
@@ -49,8 +50,8 @@ struct MapScreen: View {
         }
         .onChange(of: search.places) { syncPlaceMarkers() }
         .onChange(of: route.isActive) { syncPlaceMarkers() }
-        .onChange(of: route.route) { _, route in
-            mapState.showRoute(route?.points)
+        .onChange(of: route.overlay) { _, overlay in
+            mapState.showRoute(overlay)
         }
         .onChange(of: search.selectedPlace) { _, place in
             syncPlaceMarkers()
@@ -78,7 +79,9 @@ struct MapScreen: View {
         GeometryReader { geometry in
             let bottomSafeArea = geometry.safeAreaInsets.bottom
             // 시트가 있으면 시트 윗변 위에, 없으면 화면 아래에 붙인다.
-            let floatingBottom = if route.isActive {
+            let floatingBottom = if route.isActive && route.selectedMode == .transit {
+                sheetHeight + 12
+            } else if route.isActive {
                 routeCardHeight + bottomSafeArea + 12
             } else if isSheetVisible {
                 sheetHeight + 12
@@ -100,9 +103,14 @@ struct MapScreen: View {
                 }
 
                 if let destination = route.destination {
-                    RouteHeader(destinationName: destination.name, onClose: closeRoute)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 8)
+                    VStack(spacing: 8) {
+                        RouteHeader(destinationName: destination.name, onClose: closeRoute)
+                        TravelModeTabs(selected: route.selectedMode, results: route.results) { mode in
+                            withAnimation(.spring(duration: 0.3)) { route.selectMode(mode) }
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
                 } else {
                     VStack(spacing: 8) {
                         MapSearchBar(
@@ -130,8 +138,18 @@ struct MapScreen: View {
                     .transition(.move(edge: .bottom))
                 }
 
-                if route.isActive {
-                    RouteSummaryCard(phase: route.phase)
+                if route.isActive && route.selectedMode == .transit {
+                    BottomSheet(detent: $transitSheetDetent, visibleHeight: $sheetHeight, topReservedHeight: 160) {
+                        TransitRouteListHeader(result: route.selectedResult)
+                    } content: {
+                        TransitRouteList(result: route.selectedResult, selectedIndex: route.selectedTransitIndex) { index in
+                            route.selectTransitRoute(at: index)
+                        }
+                    }
+                    .ignoresSafeArea(edges: .bottom)
+                    .transition(.move(edge: .bottom))
+                } else if route.isActive {
+                    RouteSummaryCard(mode: route.selectedMode, result: route.selectedResult)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { routeCardHeight = $0 }
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .transition(.move(edge: .bottom))
@@ -148,6 +166,7 @@ struct MapScreen: View {
             .toast(message: $toastMessage, bottomInset: floatingBottom + 60 - bottomSafeArea)
             .animation(.spring(duration: 0.3), value: isSheetVisible)
             .animation(.spring(duration: 0.3), value: route.isActive)
+            .animation(.spring(duration: 0.3), value: route.selectedMode)
             .overlay {
                 if search.isSearchPagePresented {
                     SearchPage(viewModel: search, center: viewModel.myLocation?.point)
@@ -177,6 +196,7 @@ struct MapScreen: View {
             viewModel.onMyLocationButtonTapped()
             return
         }
+        transitSheetDetent = .medium
         Task { await route.start(to: place, from: viewModel.myLocation?.point) }
     }
 
@@ -221,7 +241,7 @@ struct MapScreen: View {
         for await effect in route.effects {
             switch effect {
             case let .fitCamera(points):
-                mapState.fitCamera(to: points, layout: .route)
+                mapState.fitCamera(to: points, layout: route.selectedMode == .transit ? .routeWithSheet : .route)
             case let .showError(error):
                 mapState.showRoute(nil)
                 toastMessage = error.userMessage

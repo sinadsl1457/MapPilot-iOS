@@ -1,20 +1,21 @@
 import SwiftUI
 
-/// 길찾기 중 하단에 뜨는 요약 카드: 예상 시간, 거리, 도착 예정 시각.
+/// 자동차·도보 길찾기 하단 카드: 예상 시간, 거리, 도착 예정 시각.
 struct RouteSummaryCard: View {
-    let phase: RouteViewModel.Phase?
+    let mode: TravelMode
+    let result: RouteViewModel.ModeResult?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("route.mode.car", systemImage: "car.fill")
+            Label(mode.title, systemImage: mode.symbolName)
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(Color.accentColor)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
                 .background(Color.accentColor.opacity(0.12), in: Capsule())
 
-            switch phase {
-            case let .loaded(route):
+            switch result {
+            case let .route(route):
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(DurationText.string(seconds: route.durationSeconds))
                         .font(.title.weight(.bold))
@@ -22,14 +23,16 @@ struct RouteSummaryCard: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
-                Text("route.arrival \(arrivalTime(after: route.durationSeconds))")
+                Text("route.arrival \(ArrivalTime.string(after: route.durationSeconds))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            case .loading, nil:
+            case let .failed(error):
+                RouteFailureText(error: error)
+                    .frame(height: 60, alignment: .leading)
+            case .loading, .transit, nil:
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("route.loading")
-                        .foregroundStyle(.secondary)
+                    Text("route.loading").foregroundStyle(.secondary)
                 }
                 .frame(height: 60)
             }
@@ -45,8 +48,20 @@ struct RouteSummaryCard: View {
                 .ignoresSafeArea(edges: .bottom)
         )
     }
+}
 
-    private func arrivalTime(after seconds: Int) -> String {
-        Date.now.addingTimeInterval(TimeInterval(seconds)).formatted(date: .omitted, time: .shortened)
+struct RouteFailureText: View {
+    let error: DomainError
+
+    var body: some View {
+        Label(error.userMessage, systemImage: "exclamationmark.circle")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+    }
+}
+
+enum ArrivalTime {
+    static func string(after seconds: Int, from now: Date = .now) -> String {
+        now.addingTimeInterval(TimeInterval(seconds)).formatted(date: .omitted, time: .shortened)
     }
 }

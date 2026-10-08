@@ -42,8 +42,3 @@ struct RouteHeader: View {
         .frame(height: 44)
     }
 }
-
-enum RouteColors {
-    static let start = Color(red: 0x35 / 255, green: 0x6D / 255, blue: 0xF3 / 255)
-    static let end = Color(red: 0xF2 / 255, green: 0x46 / 255, blue: 0x4B / 255)
-}

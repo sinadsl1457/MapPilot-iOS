@@ -354,6 +354,17 @@
         }
       }
     },
+    "route.fare %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@원"
+          }
+        }
+      }
+    },
     "route.loading": {
       "extractionState": "manual",
       "localizations": {
@@ -387,17 +398,6 @@
         }
       }
     },
-    "route.mode.car": {
-      "extractionState": "manual",
-      "localizations": {
-        "ko": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "자동차"
-          }
-        }
-      }
-    },
     "route.origin.myLocation": {
       "extractionState": "manual",
       "localizations": {
@@ -416,6 +416,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "길찾기"
+          }
+        }
+      }
+    },
+    "route.stops %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld개 정류장"
+          }
+        }
+      }
+    },
+    "route.transfers %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환승 %lld회"
+          }
+        }
+      }
+    },
+    "route.transfers.none": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "환승 없음"
+          }
+        }
+      }
+    },
+    "route.transit.count %lld": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로 %lld개"
+          }
+        }
+      }
+    },
+    "route.unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로 없음"
           }
         }
       }
@@ -526,6 +581,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "검색 결과가 없어요"
+          }
+        }
+      }
+    },
+    "travelMode.car": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "자동차"
+          }
+        }
+      }
+    },
+    "travelMode.transit": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "대중교통"
+          }
+        }
+      }
+    },
+    "travelMode.walk": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도보"
           }
         }
       }

@@ -5,6 +5,8 @@ struct KakaoAPIClient: Sendable {
     static let keywordSearchURL = URL(string: "https://dapi.kakao.com/v2/local/search/keyword.json")!
     static let categorySearchURL = URL(string: "https://dapi.kakao.com/v2/local/search/category.json")!
     static let directionsURL = URL(string: "https://apis-navi.kakaomobility.com/v1/directions")!
+    static let walkURL = URL(string: "https://dapi.kakao.com/v2/routing/walk")!
+    static let transitURL = URL(string: "https://dapi.kakao.com/v2/routing/publictraffic")!
     static let searchPageSize = 15
 
     private let restAPIKey: String
@@ -43,6 +45,24 @@ struct KakaoAPIClient: Sendable {
             URLQueryItem(name: "destination", value: Self.lonLat(destination)),
             URLQueryItem(name: "priority", value: "DISTANCE"),
         ])
+    }
+
+    func walkingRoute(from origin: GeoPoint, to destination: GeoPoint) async throws -> WalkResponseDTO {
+        try await get(Self.walkURL, queryItems: Self.routingItems(origin, destination))
+    }
+
+    func transitRoutes(from origin: GeoPoint, to destination: GeoPoint) async throws -> TransitResponseDTO {
+        try await get(Self.transitURL, queryItems: Self.routingItems(origin, destination))
+    }
+
+    /// 카카오맵 경로 API는 좌표를 x(경도)·y(위도) 파라미터로 따로 받는다.
+    private static func routingItems(_ origin: GeoPoint, _ destination: GeoPoint) -> [URLQueryItem] {
+        [
+            URLQueryItem(name: "start_x", value: String(origin.longitude)),
+            URLQueryItem(name: "start_y", value: String(origin.latitude)),
+            URLQueryItem(name: "end_x", value: String(destination.longitude)),
+            URLQueryItem(name: "end_y", value: String(destination.latitude)),
+        ]
     }
 
     private func get<Response: Decodable>(_ url: URL, queryItems: [URLQueryItem]) async throws -> Response {

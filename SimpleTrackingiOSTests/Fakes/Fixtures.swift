@@ -17,6 +17,10 @@ enum Fixtures {
         )
     }
 
+    static func transitRoute(minutes: Int, legs: [TransitLeg] = []) -> TransitRoute {
+        TransitRoute(kind: .subway, durationSeconds: minutes * 60, distanceMeters: 10_000, transfers: 0, fare: 1_500, legs: legs)
+    }
+
     static func location(
         latitude: Double = 37.5666,
         longitude: Double = 126.9784,

@@ -3,6 +3,12 @@ import Testing
 
 @MainActor
 struct KakaoMapStateTests {
+    private let overlay = RouteOverlay(
+        lines: [RouteLine(kind: .car, points: [Fixtures.cityHall, Fixtures.gangnamStation])],
+        start: Fixtures.cityHall,
+        end: Fixtures.gangnamStation
+    )
+
     @Test func cameraCommandBeforeReadyRunsOnAttach() {
         let state = KakaoMapState()
         let map = FakeMap()
@@ -100,17 +106,17 @@ struct KakaoMapStateTests {
 
     @Test func routeBeforeReadyIsReplayedOnAttach() {
         let state = KakaoMapState()
-        state.showRoute([Fixtures.cityHall, Fixtures.gangnamStation])
+        state.showRoute(overlay)
 
         let map = FakeMap()
         state.attach(map)
 
-        #expect(map.routes.last == [Fixtures.cityHall, Fixtures.gangnamStation])
+        #expect(map.routes.last == overlay)
     }
 
     @Test func clearedRouteIsNotReplayed() {
         let state = KakaoMapState()
-        state.showRoute([Fixtures.cityHall, Fixtures.gangnamStation])
+        state.showRoute(overlay)
         state.showRoute(nil)
 
         let map = FakeMap()
@@ -151,10 +157,10 @@ private final class FakeMap: KakaoMapCommands {
         markerUpdates.append((markers, selectedID))
     }
 
-    var routes: [[GeoPoint]?] = []
+    var routes: [RouteOverlay?] = []
 
-    func showRoute(_ points: [GeoPoint]?) {
-        routes.append(points)
+    func showRoute(_ overlay: RouteOverlay?) {
+        routes.append(overlay)
     }
 
     func updateMyLocation(_ location: UserLocation?) {

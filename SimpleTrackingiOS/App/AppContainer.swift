@@ -9,6 +9,8 @@ final class AppContainer {
     let searchPlacesByCategory: SearchPlacesByCategoryUseCase
     let recentSearches: RecentSearchesUseCase
     let findRoute: FindRouteUseCase
+    let findWalkingRoute: FindWalkingRouteUseCase
+    let findTransitRoutes: FindTransitRoutesUseCase
     let observeLocation: ObserveLocationUseCase
     let getLocationPermission: GetLocationPermissionUseCase
     let requestLocationPermission: RequestLocationPermissionUseCase
@@ -29,6 +31,8 @@ final class AppContainer {
         searchPlacesByCategory = SearchPlacesByCategoryUseCase(repository: placeRepository)
         recentSearches = RecentSearchesUseCase(repository: UserDefaultsRecentSearchRepository())
         findRoute = FindRouteUseCase(repository: routeRepository)
+        findWalkingRoute = FindWalkingRouteUseCase(repository: routeRepository)
+        findTransitRoutes = FindTransitRoutesUseCase(repository: routeRepository)
         observeLocation = ObserveLocationUseCase(repository: locationRepository)
         getLocationPermission = GetLocationPermissionUseCase(repository: locationRepository)
         requestLocationPermission = RequestLocationPermissionUseCase(repository: locationRepository)
@@ -43,7 +47,7 @@ final class AppContainer {
     }
 
     func makeRouteViewModel() -> RouteViewModel {
-        RouteViewModel(findRoute: findRoute)
+        RouteViewModel(findCarRoute: findRoute, findWalkingRoute: findWalkingRoute, findTransitRoutes: findTransitRoutes)
     }
 
     func makePlaceSearchViewModel() -> PlaceSearchViewModel {
