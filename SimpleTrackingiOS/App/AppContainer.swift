@@ -19,7 +19,11 @@ final class AppContainer {
         let apiClient = KakaoAPIClient(restAPIKey: secrets.kakaoRestAPIKey, session: session)
         let placeRepository = PlaceRepositoryImpl(client: apiClient)
         let routeRepository = RouteRepositoryImpl(client: apiClient)
-        let locationRepository = LocationRepositoryImpl()
+        let locationRepository: any LocationRepository = if let fixed = secrets.fixedLocation {
+            FixedLocationRepository(point: fixed)
+        } else {
+            LocationRepositoryImpl()
+        }
 
         searchPlaces = SearchPlacesUseCase(repository: placeRepository)
         searchPlacesByCategory = SearchPlacesByCategoryUseCase(repository: placeRepository)
