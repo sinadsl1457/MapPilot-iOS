@@ -1,0 +1,10 @@
+# Xcode
+xcuserdata/
+DerivedData/
+build/
+*.xcuserstate
+
+# Secrets (Secrets.example.xcconfig is committed instead)
+Secrets.xcconfig
+
+.DS_Store

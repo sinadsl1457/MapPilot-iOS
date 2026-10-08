@@ -1,0 +1,6 @@
+// 앱 타깃 공통 설정. 키는 git에 올라가지 않는 Secrets.xcconfig에서 읽는다.
+// Secrets.xcconfig가 없어도 빌드는 되고, 앱은 키 설정 안내 화면을 보여준다.
+KAKAO_NATIVE_APP_KEY =
+KAKAO_REST_API_KEY =
+
+#include? "Secrets.xcconfig"
