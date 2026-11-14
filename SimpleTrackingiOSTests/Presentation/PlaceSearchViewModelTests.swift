@@ -183,3 +183,179 @@ struct PlaceSearchViewModelTests {
         #expect(viewModel.query.isEmpty)
     }
 }
+
+// MARK: - 실시간 검색 (Flutter place_search_notifier_test '실시간 검색'과 같은 경우)
+
+@MainActor
+@Suite(.timeLimit(.minutes(1)))
+struct PlaceSearchSuggestionTests {
+    private let cafes = [Fixtures.place(id: "c1", latitude: 37.50), Fixtures.place(id: "c2", latitude: 37.51)]
+    private let banks = [Fixtures.place(id: "b1", latitude: 37.52)]
+
+    private func makeViewModel(
+        _ repository: ScriptedPlaceRepository,
+        recents: FakeRecentSearchRepository = FakeRecentSearchRepository(),
+        delay: Duration = .zero
+    ) -> PlaceSearchViewModel {
+        PlaceSearchViewModel(
+            searchPlaces: SearchPlacesUseCase(repository: repository),
+            searchPlacesByCategory: SearchPlacesByCategoryUseCase(repository: repository),
+            recentSearches: RecentSearchesUseCase(repository: recents),
+            suggestDelay: delay
+        )
+    }
+
+    @Test func searchesAfterTypingPausesNotBefore() async {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository, delay: .milliseconds(100))
+
+        viewModel.onQueryChanged("카페", center: nil)
+        #expect(await repository.receivedQueries.isEmpty)
+        #expect(viewModel.isSuggesting)
+
+        await viewModel.waitForSuggestion()
+
+        #expect(await repository.receivedQueries == ["카페"])
+        #expect(viewModel.suggestions == cafes)
+        #expect(viewModel.suggestionsQuery == "카페")
+        #expect(viewModel.isSuggesting == false)
+    }
+
+    @Test func rapidTypingSearchesOnlyLastInput() async {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository, delay: .milliseconds(100))
+
+        viewModel.onQueryChanged("카", center: nil)
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.waitForSuggestion()
+
+        #expect(await repository.receivedQueries == ["카페"])
+    }
+
+    @Test func discardsLateResultOfPreviousInput() async throws {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes, "은행": banks], delays: ["카페": .milliseconds(300)])
+        let viewModel = makeViewModel(repository)
+
+        viewModel.onQueryChanged("카페", center: nil)
+        // "카페" 요청이 서버에 도착할 때까지 기다린 뒤 다음 입력
+        while await repository.receivedQueries.isEmpty { await Task.yield() }
+        viewModel.onQueryChanged("은행", center: nil)
+        await viewModel.waitForSuggestion()
+        try await Task.sleep(for: .milliseconds(400)) // 늦은 "카페" 응답이 도착할 시간
+
+        #expect(viewModel.suggestions == banks)
+        #expect(viewModel.suggestionsQuery == "은행")
+    }
+
+    @Test func keepsPreviousResultsWhileNewInputLoads() async {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes, "은행": banks])
+        let viewModel = makeViewModel(repository, delay: .milliseconds(100))
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.waitForSuggestion()
+
+        viewModel.onQueryChanged("은행", center: nil)
+
+        #expect(viewModel.suggestions == cafes)
+        #expect(viewModel.isSuggesting)
+        #expect(viewModel.isSuggestionEmpty == false)
+    }
+
+    @Test func pickingWhileTypingKeepsQueryOfThatList() async {
+        let recents = FakeRecentSearchRepository()
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository, recents: recents, delay: .milliseconds(100))
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.waitForSuggestion()
+        viewModel.onQueryChanged("카페 강", center: nil)
+
+        await viewModel.pickSuggestion(cafes[1])
+
+        #expect(viewModel.source == .keyword("카페"))
+        #expect(viewModel.recentQueries == ["카페"])
+    }
+
+    @Test func whitespaceOnlyChangeDoesNotSearchAgain() async {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository)
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.waitForSuggestion()
+
+        viewModel.onQueryChanged(" 카페  ", center: nil)
+        await viewModel.waitForSuggestion()
+
+        #expect(await repository.receivedQueries == ["카페"])
+        #expect(viewModel.query == " 카페  ")
+    }
+
+    @Test func clearingInputEmptiesSuggestionsAndCancelsPending() async throws {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes, "은행": banks])
+        let viewModel = makeViewModel(repository, delay: .milliseconds(100))
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.waitForSuggestion()
+
+        viewModel.onQueryChanged("은행", center: nil)
+        viewModel.onQueryChanged("", center: nil)
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(await repository.receivedQueries == ["카페"])
+        #expect(viewModel.suggestFor.isEmpty)
+        #expect(viewModel.suggestions.isEmpty)
+        #expect(viewModel.isSuggesting == false)
+    }
+
+    @Test func submitCancelsPendingSuggestion() async throws {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository, delay: .milliseconds(100))
+        viewModel.openSearchPage()
+
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.submit(center: nil)
+        try await Task.sleep(for: .milliseconds(200))
+
+        // 엔터 검색 한 번만
+        #expect(await repository.receivedQueries == ["카페"])
+        #expect(viewModel.places == cafes)
+    }
+
+    @Test func pickingSuggestionShowsItOnMapWithoutSearchingAgain() async {
+        let recents = FakeRecentSearchRepository()
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository, recents: recents)
+        var effects = viewModel.effects.makeAsyncIterator()
+        viewModel.openSearchPage()
+        viewModel.onQueryChanged("카페", center: nil)
+        await viewModel.waitForSuggestion()
+
+        await viewModel.pickSuggestion(cafes[1])
+
+        #expect(await repository.receivedQueries == ["카페"])
+        #expect(viewModel.isSearchPagePresented == false)
+        #expect(viewModel.places == cafes)
+        #expect(viewModel.selectedPlace == cafes[1])
+        #expect(await recents.stored == ["카페"])
+        #expect(await effects.next() == .focus(cafes[1].location))
+    }
+
+    @Test func closingPageCancelsPendingSuggestion() async throws {
+        let repository = ScriptedPlaceRepository(results: ["카페": cafes])
+        let viewModel = makeViewModel(repository, delay: .milliseconds(100))
+        viewModel.openSearchPage()
+
+        viewModel.onQueryChanged("카페", center: nil)
+        viewModel.closeSearchPage()
+        try await Task.sleep(for: .milliseconds(200))
+
+        #expect(await repository.receivedQueries.isEmpty)
+    }
+
+    @Test func emptyResultOfCurrentInputShowsNoResults() async {
+        let repository = ScriptedPlaceRepository(results: [:])
+        let viewModel = makeViewModel(repository)
+
+        viewModel.onQueryChanged("없는곳", center: nil)
+        #expect(viewModel.isSuggestionEmpty == false) // 아직 받는 중
+        await viewModel.waitForSuggestion()
+
+        #expect(viewModel.isSuggestionEmpty)
+    }
+}

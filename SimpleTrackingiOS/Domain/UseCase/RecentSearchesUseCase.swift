@@ -16,7 +16,7 @@ struct RecentSearchesUseCase: Sendable {
 
     @discardableResult
     func add(_ query: String) async -> [String] {
-        let normalized = Self.normalize(query)
+        let normalized = QueryNormalizer.normalize(query)
         guard !normalized.isEmpty else { return await repository.load() }
         var queries = await repository.load().filter { $0 != normalized }
         queries.insert(normalized, at: 0)
@@ -34,9 +34,5 @@ struct RecentSearchesUseCase: Sendable {
 
     func clear() async {
         await repository.save([])
-    }
-
-    private static func normalize(_ query: String) -> String {
-        query.split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 }
