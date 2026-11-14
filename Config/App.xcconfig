@@ -2,7 +2,5 @@
 // Secrets.xcconfig가 없어도 빌드는 되고, 앱은 키 설정 안내 화면을 보여준다.
 KAKAO_NATIVE_APP_KEY =
 KAKAO_REST_API_KEY =
-// "위도,경도". 값이 있으면 GPS 대신 이 좌표를 내 위치로 쓴다(연습·시뮬레이터용).
-FIXED_LOCATION =
 
 #include? "Secrets.xcconfig"

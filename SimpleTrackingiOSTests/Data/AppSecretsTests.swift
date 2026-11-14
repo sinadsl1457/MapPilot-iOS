@@ -10,17 +10,4 @@ struct AppSecretsTests {
         #expect(Bundle.main.object(forInfoDictionaryKey: "NSLocationWhenInUseUsageDescription") as? String
             == "현재 위치를 지도에 표시하기 위해 사용합니다")
     }
-
-    @Test(arguments: [
-        ("37.5666,126.9784", GeoPoint(latitude: 37.5666, longitude: 126.9784) as GeoPoint?),
-        (" 37.5 , 126.9 ", GeoPoint(latitude: 37.5, longitude: 126.9)),
-        ("", nil),
-        ("37.5", nil),
-        ("abc,127", nil),
-        ("91,127", nil),
-        ("37.5,181", nil),
-    ])
-    func parsesFixedLocation(text: String, expected: GeoPoint?) {
-        #expect(AppSecrets.parseGeoPoint(text) == expected)
-    }
 }
