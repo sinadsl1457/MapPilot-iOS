@@ -28,14 +28,11 @@ struct RouteOverlay: Equatable, Sendable {
     var allPoints: [GeoPoint] { [start] + lines.flatMap(\.points) + [end] }
 }
 
-/// 카메라를 여러 지점에 맞출 때 화면의 어떤 부분이 가려지는지.
-enum MapFitLayout: Equatable, Sendable {
-    /// 위: 검색창+칩, 아래: 큰 하단 시트
-    case searchResults
-    /// 위: 출발·도착 카드와 탭, 아래: 작은 요약 카드
-    case route
-    /// 위: 출발·도착 카드와 탭, 아래: 큰 하단 시트(대중교통 목록)
-    case routeWithSheet
+/// 카메라를 여러 지점에 맞출 때 앱 UI가 지도를 가리는 높이(pt). 지점은 그 안쪽에 보이게 맞춘다.
+/// 위: 상단 UI(검색창·칩 또는 길찾기 카드·탭), 아래: 시트가 멈출 높이 또는 경로 카드 높이.
+struct MapInsets: Equatable, Sendable {
+    var top: CGFloat
+    var bottom: CGFloat
 }
 
 /// 지도에 내리는 명령. `KakaoMapController`가 구현하고, 테스트에서는 fake로 바꾼다.
@@ -43,7 +40,7 @@ enum MapFitLayout: Equatable, Sendable {
 protocol KakaoMapCommands: AnyObject {
     /// animated가 false면 애니메이션 없이 바로 놓는다(내 위치로 갈 때).
     func moveCamera(to point: GeoPoint, zoom: Int, animated: Bool)
-    func fitCamera(to points: [GeoPoint], layout: MapFitLayout)
+    func fitCamera(to points: [GeoPoint], insets: MapInsets)
     func updateMyLocation(_ location: UserLocation?)
     func showPlaceMarkers(_ markers: [PlaceMarker], selectedID: String?)
     /// 경로 선과 출발·도착 마커. nil이면 지운다.
@@ -76,7 +73,7 @@ final class KakaoMapState {
 
     private enum PendingCamera {
         case move(GeoPoint, zoom: Int, animated: Bool)
-        case fit([GeoPoint], MapFitLayout)
+        case fit([GeoPoint], MapInsets)
     }
 
     var isMapReady: Bool { map != nil }
@@ -90,12 +87,12 @@ final class KakaoMapState {
         }
     }
 
-    func fitCamera(to points: [GeoPoint], layout: MapFitLayout) {
+    func fitCamera(to points: [GeoPoint], insets: MapInsets) {
         guard !points.isEmpty else { return }
         if let map {
-            map.fitCamera(to: points, layout: layout)
+            map.fitCamera(to: points, insets: insets)
         } else {
-            pendingCamera = .fit(points, layout)
+            pendingCamera = .fit(points, insets)
         }
     }
 
@@ -131,7 +128,7 @@ final class KakaoMapState {
         map.showRoute(routeOverlay)
         switch pendingCamera {
         case let .move(point, zoom, animated): map.moveCamera(to: point, zoom: zoom, animated: animated)
-        case let .fit(points, layout): map.fitCamera(to: points, layout: layout)
+        case let .fit(points, insets): map.fitCamera(to: points, insets: insets)
         case nil: break
         }
         pendingCamera = nil

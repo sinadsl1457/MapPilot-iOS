@@ -63,7 +63,7 @@ struct KakaoMapStateTests {
     @Test func fitBeforeReadyRunsOnAttachAndReplacesEarlierMove() {
         let state = KakaoMapState()
         state.moveCamera(to: Fixtures.cityHall, zoom: 15)
-        state.fitCamera(to: [Fixtures.cityHall, Fixtures.gangnamStation], layout: .route)
+        state.fitCamera(to: [Fixtures.cityHall, Fixtures.gangnamStation], insets: MapInsets(top: 100, bottom: 200))
 
         let map = FakeMap()
         state.attach(map)
@@ -77,7 +77,7 @@ struct KakaoMapStateTests {
         let map = FakeMap()
         state.attach(map)
 
-        state.fitCamera(to: [], layout: .searchResults)
+        state.fitCamera(to: [], insets: MapInsets(top: 100, bottom: 200))
 
         #expect(map.fits.isEmpty)
     }
@@ -185,7 +185,7 @@ private final class FakeMap: KakaoMapCommands {
         followModes.append(mode)
     }
 
-    func fitCamera(to points: [GeoPoint], layout: MapFitLayout) {
+    func fitCamera(to points: [GeoPoint], insets: MapInsets) {
         fits.append(points)
     }
 

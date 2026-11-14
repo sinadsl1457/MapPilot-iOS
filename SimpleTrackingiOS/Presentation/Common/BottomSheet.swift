@@ -4,6 +4,9 @@ import SwiftUI
 /// 현재 높이(`visibleHeight`)를 알려 다른 버튼을 시트 위에 붙일 수 있다.
 enum BottomSheetDetent: CaseIterable {
     case collapsed, medium, large
+
+    /// 중간 높이 = 시트가 놓인 영역 높이의 이 비율. 카메라 여백 계산(MapScreen)도 같은 값을 쓴다.
+    static let mediumRatio: CGFloat = 0.45
 }
 
 struct BottomSheet<Header: View, Content: View>: View {
@@ -57,7 +60,7 @@ struct BottomSheet<Header: View, Content: View>: View {
     private func detentHeights(containerHeight: CGFloat) -> [Detent: CGFloat] {
         [
             .collapsed: 230,
-            .medium: containerHeight * 0.45,
+            .medium: containerHeight * BottomSheetDetent.mediumRatio,
             .large: containerHeight - topReservedHeight,
         ]
     }

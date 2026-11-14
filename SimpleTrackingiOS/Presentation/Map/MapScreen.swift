@@ -12,6 +12,10 @@ struct MapScreen: View {
     @State private var sheetHeight: CGFloat = 0
     @State private var routeCardHeight: CGFloat = 0
     @State private var transitSheetDetent: BottomSheetDetent = .medium
+    /// 상단 UI(검색창·칩 또는 길찾기 카드·탭)의 높이. 카메라를 맞출 때 위쪽 여백이 된다.
+    @State private var topControlsHeight: CGFloat = 0
+    /// 화면 높이와 위·아래 안전 영역. 카메라 여백 계산에 쓴다(지도는 안전 영역까지 덮는다).
+    @State private var screen = ScreenMetrics()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
 
@@ -121,6 +125,7 @@ struct MapScreen: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 8)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topControlsHeight = $0 }
                 } else {
                     VStack(spacing: 8) {
                         MapSearchBar(
@@ -136,6 +141,7 @@ struct MapScreen: View {
                         }
                     }
                     .padding(.top, 8)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topControlsHeight = $0 }
                 }
 
                 if isSheetVisible {
@@ -177,6 +183,9 @@ struct MapScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                 .ignoresSafeArea(edges: .bottom)
             }
+            .onGeometryChange(for: ScreenMetrics.self) { proxy in
+                ScreenMetrics(height: proxy.size.height, safeTop: proxy.safeAreaInsets.top, safeBottom: proxy.safeAreaInsets.bottom)
+            } action: { screen = $0 }
             .toast(message: $toastMessage, bottomInset: floatingBottom + 60 - bottomSafeArea)
             .animation(.spring(duration: 0.3), value: isSheetVisible)
             .animation(.spring(duration: 0.3), value: route.isActive)
@@ -222,6 +231,19 @@ struct MapScreen: View {
         }
     }
 
+    /// [points]가 위 UI와 아래 UI([bottomCovered]) 사이, 실제로 보이는 곳에 들어오게 맞춘다.
+    /// 아래 시트는 펼쳐지는 중일 수 있어 지금 높이가 아니라 멈출 높이를 넘겨받는다.
+    private func fitCamera(to points: [GeoPoint], bottomCovered: CGFloat) {
+        // 상단 UI는 안전 영역 아래 8pt부터 시작한다(.padding(.top, 8)이 높이에 포함됨).
+        let insets = MapInsets(top: screen.safeTop + topControlsHeight, bottom: bottomCovered)
+        cameraAwayFromMe { mapState.fitCamera(to: points, insets: insets) }
+    }
+
+    /// 중간 높이로 멈춘 하단 시트(장소 결과·대중교통 목록)가 가리는 높이. BottomSheet의 medium과 같은 계산.
+    private var mediumSheetHeight: CGFloat {
+        (screen.height + screen.safeBottom) * BottomSheetDetent.mediumRatio
+    }
+
     /// 내 위치가 아닌 곳(검색 결과, 경로)으로 카메라를 옮긴다. 따라가기를 먼저 꺼야
     /// 트래킹이 카메라를 내 위치로 되돌리지 않는다.
     private func cameraAwayFromMe(_ move: () -> Void) {
@@ -264,8 +286,12 @@ struct MapScreen: View {
         for await effect in route.effects {
             switch effect {
             case let .fitCamera(points):
-                cameraAwayFromMe {
-                    mapState.fitCamera(to: points, layout: route.selectedMode == .transit ? .routeWithSheet : .route)
+                if route.selectedMode == .transit {
+                    fitCamera(to: points, bottomCovered: mediumSheetHeight)
+                } else {
+                    // 경로 카드는 이 effect와 같은 상태 변경으로 이제 막 바뀐다. 다시 그려진 뒤의 실제 높이로 맞춘다.
+                    try? await Task.sleep(for: .milliseconds(50))
+                    fitCamera(to: points, bottomCovered: routeCardHeight + screen.safeBottom)
                 }
             case let .showError(error):
                 mapState.showRoute(nil)
@@ -280,7 +306,7 @@ struct MapScreen: View {
         for await effect in search.effects {
             switch effect {
             case let .fitCamera(points):
-                cameraAwayFromMe { mapState.fitCamera(to: points, layout: .searchResults) }
+                fitCamera(to: points, bottomCovered: mediumSheetHeight)
             case let .focus(point):
                 cameraAwayFromMe { mapState.moveCamera(to: point, zoom: 17) }
             case let .showError(error):
@@ -288,4 +314,11 @@ struct MapScreen: View {
             }
         }
     }
+}
+
+/// 화면 높이와 안전 영역. 카메라 여백을 계산할 때 쓴다.
+private struct ScreenMetrics: Equatable {
+    var height: CGFloat = 0
+    var safeTop: CGFloat = 0
+    var safeBottom: CGFloat = 0
 }

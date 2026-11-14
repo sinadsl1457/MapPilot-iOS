@@ -52,6 +52,8 @@ final class KakaoMapController: NSObject {
     private var shouldBeActive = false
 
     private var map: KakaoMap? { controller?.getView(ID.mapView) as? KakaoMap }
+    /// fitCamera가 SDK 여백(setMargins)을 넣어 둔 상태인지. moveCamera가 있을 때만 비운다.
+    private var hasFitMargins = false
     private var myLocationPoi: Poi?
     private var myLocationStyle: String?
     /// 마지막으로 옮긴 내 위치. 다음 위치까지 거리로 애니메이션 여부를 정한다.
@@ -365,8 +367,13 @@ final class KakaoMapController: NSObject {
 // MARK: - KakaoMapCommands
 
 extension KakaoMapController: KakaoMapCommands {
+    /// fitCamera가 여백을 남겼으면 비워 화면 한가운데 기준으로 되돌린다.
     func moveCamera(to point: GeoPoint, zoom: Int, animated: Bool) {
         guard let map else { return }
+        if hasFitMargins {
+            map.resetMargins()
+            hasFitMargins = false
+        }
         let update = CameraUpdate.make(target: Self.mapPoint(point), zoomLevel: zoom, mapView: map)
         if animated {
             map.animateCamera(
@@ -378,34 +385,36 @@ extension KakaoMapController: KakaoMapCommands {
         }
     }
 
-    /// 지점이 모두 보이게 맞춘다. 위·아래 UI가 지도를 가리는 만큼 영역을 넓혀 잡는다.
-    func fitCamera(to points: [GeoPoint], layout: MapFitLayout) {
-        guard let map else { return }
-        if points.count == 1, let point = points.first {
-            moveCamera(to: point, zoom: 16, animated: true)
-            return
-        }
+    /// 지점이 모두 insets 안쪽(앱 UI에 가리지 않는 영역)에 보이게 맞춘다.
+    /// SDK 여백(setMargins)에 UI가 가리는 만큼을 넣으면 영역 맞추기가 그 안쪽 기준이 된다.
+    /// 여백은 다음 moveCamera가 비울 때까지 남는다(그동안 내 위치 따라가기도 보이는 영역 기준).
+    /// 예전 방식(경로 높이의 고정 배수로 위·아래를 늘림)은 옆으로 긴 경로에서 출발·도착이 탭·시트에 가려졌다.
+    func fitCamera(to points: [GeoPoint], insets: MapInsets) {
+        guard let map, !points.isEmpty else { return }
+        map.setMargins(UIEdgeInsets(top: insets.top, left: 0, bottom: insets.bottom, right: 0))
+        hasFitMargins = true
         let latitudes = points.map(\.latitude)
         let longitudes = points.map(\.longitude)
         guard let minLat = latitudes.min(), let maxLat = latitudes.max(),
               let minLon = longitudes.min(), let maxLon = longitudes.max() else { return }
-        let latSpan = max(maxLat - minLat, 0.002)
-        let lonSpan = max(maxLon - minLon, 0.002)
-        // 위도 범위 대비 위·아래로 더 잡을 비율
-        let (top, bottom): (Double, Double) = switch layout {
-        case .searchResults: (0.5, 1.2)
-        case .route: (0.8, 0.5)
-        case .routeWithSheet: (0.9, 1.3)
-        }
+        // 보이는 영역 안에서도 가장자리에 붙지 않게(출발·도착 말풍선이 잘리지 않게) 범위를 조금 넓힌다.
+        // 한 점이면 최소 범위로 과하게 확대되지 않게 한다.
+        let latMargin = max(maxLat - minLat, Self.minFitSpan) * Self.fitEdgeRatio
+        let lonMargin = max(maxLon - minLon, Self.minFitSpan) * Self.fitEdgeRatio
         let area = AreaRect(
-            southWest: MapPoint(longitude: minLon - lonSpan * 0.1, latitude: minLat - latSpan * bottom),
-            northEast: MapPoint(longitude: maxLon + lonSpan * 0.1, latitude: maxLat + latSpan * top)
+            southWest: MapPoint(longitude: minLon - lonMargin, latitude: minLat - latMargin),
+            northEast: MapPoint(longitude: maxLon + lonMargin, latitude: maxLat + latMargin)
         )
         map.animateCamera(
             cameraUpdate: CameraUpdate.make(area: area, levelLimit: 17),
             options: CameraAnimationOptions(autoElevation: false, consecutive: false, durationInMillis: Self.cameraAnimationMillis)
         )
     }
+
+    /// 한 점이거나 아주 좁게 모였을 때의 최소 범위(도).
+    private static let minFitSpan = 0.002
+    /// 범위에 더하는 가장자리 여백 비율.
+    private static let fitEdgeRatio = 0.15
 
     func showPlaceMarkers(_ markers: [PlaceMarker], selectedID: String?) {
         guard let map, let layer = map.getLabelManager().getLabelLayer(layerID: ID.placeLayer) else { return }
