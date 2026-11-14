@@ -21,6 +21,8 @@ struct MapScreen: View {
     @State private var routeCardHeight: CGFloat = 0
     /// 상단 UI(검색창·칩 또는 길찾기 카드·탭)의 높이. 카메라를 맞출 때 위쪽 여백이 된다.
     @State private var topControlsHeight: CGFloat = 0
+    /// 검색창 줄의 높이. 장소 시트를 끝까지 올리면 이 줄 바로 아래에서 멈춘다.
+    @State private var searchRowHeight: CGFloat = 0
     /// 화면 높이와 위·아래 안전 영역. 카메라 여백 계산에 쓴다(지도는 안전 영역까지 덮는다).
     @State private var screen = ScreenMetrics()
     @State private var isPlannerPresented = false
@@ -159,19 +161,30 @@ struct MapScreen: View {
                         .background(.background)
                 }
 
-                topControls
-                    .padding(.top, 8)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topControlsHeight = $0 }
-
                 if isSheetVisible {
-                    BottomSheet(detent: $sheetDetent, visibleHeight: $sheetHeight) {
+                    BottomSheet(detent: $sheetDetent, visibleHeight: $sheetHeight, topInset: sheetTopInset) {
                         PlaceResultsHeader(viewModel: search)
                     } content: {
                         PlaceResultsContent(viewModel: search, myLocation: myLocation, onRoute: startRoute)
                     }
                     .ignoresSafeArea()
                     .transition(.move(edge: .bottom))
+
+                    // 목록을 중간보다 올리면 검색창 뒤(상태 표시줄까지)를 배경색으로 채워 지도가 비치지 않게 한다.
+                    Color(.systemBackground)
+                        // ignoresSafeArea로 화면 맨 위부터 그려지므로 높이는 맨 위 ~ 검색창 아래 전체.
+                        .frame(height: sheetTopInset)
+                        .frame(maxWidth: .infinity)
+                        .ignoresSafeArea(edges: .top)
+                        .opacity(isSheetAboveMedium ? 1 : 0)
+                        .animation(.easeOut(duration: 0.15), value: isSheetAboveMedium)
+                        .allowsHitTesting(false)
                 }
+
+                // 검색창은 시트보다 위에 그린다(목록을 끝까지 올려도 보인다). 칩은 목록에 덮이도록 시트가 올라오면 숨긴다.
+                topControls
+                    .padding(.top, 8)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topControlsHeight = $0 }
 
                 if route.isShowingRoute {
                     RouteSummaryCard(mode: route.selectedMode, result: route.selectedResult, transitIndex: route.selectedTransitIndex)
@@ -188,8 +201,8 @@ struct MapScreen: View {
                     viewModel.onMyLocationButtonTapped()
                 }
                 // 시트를 중간보다 높이 올리면 목록을 보는 중이라 숨긴다(버튼이 화면 위로 밀려 올라가지 않게).
-                .opacity(isSheetVisible && sheetHeight > mediumSheetHeight + 1 ? 0 : 1)
-                .animation(.easeOut(duration: 0.15), value: isSheetVisible && sheetHeight > mediumSheetHeight + 1)
+                .opacity(isSheetAboveMedium ? 0 : 1)
+                .animation(.easeOut(duration: 0.15), value: isSheetAboveMedium)
                 .padding(.trailing, 16)
                 .padding(.bottom, floatingBottom)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
@@ -259,8 +272,9 @@ struct MapScreen: View {
         } else {
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
+                    // 카테고리 결과면 검색창에 카테고리 이름("카페")을 보인다.
                     MapSearchBar(
-                        keyword: search.keyword,
+                        keyword: search.keyword ?? search.selectedCategory?.title,
                         showsClear: isSheetVisible,
                         onTap: search.openSearchPage,
                         onClear: search.clearResults
@@ -268,10 +282,14 @@ struct MapScreen: View {
                     DirectionsButton { isPlannerPresented = true }
                 }
                 .padding(.horizontal, 16)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { searchRowHeight = $0 }
 
                 CategoryChips(selected: search.selectedCategory) { category in
                     Task { await search.toggleCategory(category, around: searchCenter) }
                 }
+                .opacity(isSheetAboveMedium ? 0 : 1)
+                .allowsHitTesting(!isSheetAboveMedium)
+                .animation(.easeOut(duration: 0.15), value: isSheetAboveMedium)
             }
         }
     }
@@ -331,6 +349,16 @@ struct MapScreen: View {
         // 상단 UI는 안전 영역 아래 8pt부터 시작한다(.padding(.top, 8)이 높이에 포함됨).
         let insets = MapInsets(top: screen.safeTop + topControlsHeight, bottom: bottomCovered)
         cameraAwayFromMe { mapState.fitCamera(to: points, insets: insets) }
+    }
+
+    /// 장소 시트를 끝까지 올렸을 때 카드 윗변 위치(화면 맨 위부터): 검색창 줄 바로 아래.
+    private var sheetTopInset: CGFloat {
+        screen.safeTop + 8 + searchRowHeight + 8
+    }
+
+    /// 시트가 중간보다 올라와 칩·내 위치 버튼 자리를 덮는 중.
+    private var isSheetAboveMedium: Bool {
+        isSheetVisible && sheetHeight > mediumSheetHeight + 1
     }
 
     /// 중간 높이로 멈춘 장소 결과 시트가 가리는 높이. BottomSheet의 medium과 같은 계산.

@@ -6,10 +6,11 @@ enum BottomSheetDetent: CaseIterable {
     /// 장소 상세처럼 지도를 보며 짧은 내용만 보일 때
     case collapsed
     case medium
-    /// 화면 맨 위(상태 표시줄 바로 아래)까지
+    /// 맨 위(`topInset`, 보통 지도 검색창 바로 아래)까지
     case large
 
     /// 중간 높이 = 상태 표시줄 아래 화면 높이의 이 비율. 카메라 여백 계산(MapScreen)도 같은 값을 쓴다.
+    /// (맨 위 높이와 달리 검색창 높이에 따라 바뀌지 않게 상태 표시줄 기준으로 둔다.)
     static let mediumRatio: CGFloat = 0.45
     static let collapsedHeight: CGFloat = 230
 }
@@ -24,6 +25,9 @@ struct BottomSheet<Header: View, Content: View>: UIViewControllerRepresentable {
     @Binding var detent: BottomSheetDetent
     /// 화면 아래 끝부터 카드 윗변까지의 높이.
     @Binding var visibleHeight: CGFloat
+    /// 끝까지 올렸을 때 카드 윗변의 위치(화면 맨 위부터). 그 위의 UI(검색창)는 가려지지 않는다.
+    /// 상태 표시줄보다 작으면 상태 표시줄 바로 아래까지.
+    var topInset: CGFloat = 0
     @ViewBuilder var header: Header
     @ViewBuilder var content: Content
 
@@ -34,7 +38,7 @@ struct BottomSheet<Header: View, Content: View>: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: BottomSheetController, context: Context) {
         controller.onDetentChange = { detent = $0 }
         controller.onHeightChange = { visibleHeight = $0 }
-        controller.update(rootView: card, detent: detent)
+        controller.update(rootView: card, detent: detent, topInset: topInset)
     }
 
     private var card: AnyView {
@@ -80,6 +84,7 @@ final class BottomSheetController: UIViewController, UIScrollViewDelegate {
     /// 내용이 짧아도 카드가 화면 맨 위까지 올라갈 수 있게 하는 최소 높이.
     private var minHeightConstraint: NSLayoutConstraint?
     private var laidOutSize: CGSize = .zero
+    private var topInset: CGFloat = 0
     private var lastReportedHeight: CGFloat = -1
 
     init(rootView: AnyView, detent: BottomSheetDetent) {
@@ -141,16 +146,25 @@ final class BottomSheetController: UIViewController, UIScrollViewDelegate {
         let size = view.bounds.size
         guard size.height > 0, size != laidOutSize else { return }
         laidOutSize = size
-        spacerConstraint?.constant = size.height - BottomSheetDetent.collapsedHeight
-        minHeightConstraint?.constant = size.height - view.safeAreaInsets.top
+        applyLayout()
+    }
+
+    /// 화면 크기·맨 위 위치가 바뀌면 빈 공간·최소 높이를 다시 정하고 지금 높이에 놓는다.
+    private func applyLayout() {
+        spacerConstraint?.constant = screenHeight - BottomSheetDetent.collapsedHeight
+        minHeightConstraint?.constant = screenHeight - fullTop
         scrollView.layoutIfNeeded()
         scrollView.contentOffset.y = offset(for: detent)
         reportHeight()
     }
 
     /// SwiftUI가 다시 그릴 때. 바깥에서 높이를 바꿨으면(장소 선택 → 접기 등) 그 높이로 움직인다.
-    func update(rootView: AnyView, detent newDetent: BottomSheetDetent) {
+    func update(rootView: AnyView, detent newDetent: BottomSheetDetent, topInset newTopInset: CGFloat) {
         host.rootView = rootView
+        if newTopInset != topInset {
+            topInset = newTopInset
+            if laidOutSize != .zero { applyLayout() }
+        }
         guard newDetent != detent else { return }
         detent = newDetent
         guard laidOutSize != .zero else { return }
@@ -161,19 +175,21 @@ final class BottomSheetController: UIViewController, UIScrollViewDelegate {
 
     private var screenHeight: CGFloat { laidOutSize.height }
     private var safeTop: CGFloat { view.safeAreaInsets.top }
+    /// 끝까지 올렸을 때 카드 윗변 위치.
+    private var fullTop: CGFloat { max(topInset, safeTop) }
 
     private func offset(for detent: BottomSheetDetent) -> CGFloat {
         let collapsed = BottomSheetDetent.collapsedHeight
         switch detent {
         case .collapsed: return 0
         case .medium: return (screenHeight - safeTop) * BottomSheetDetent.mediumRatio - collapsed
-        case .large: return screenHeight - safeTop - collapsed
+        case .large: return screenHeight - fullTop - collapsed
         }
     }
 
     /// 카드가 화면 맨 위에 닿은 뒤에는(목록 스크롤 중) 높이를 더 늘리지 않는다.
     private func reportHeight() {
-        let height = min(BottomSheetDetent.collapsedHeight + scrollView.contentOffset.y, screenHeight - safeTop)
+        let height = min(BottomSheetDetent.collapsedHeight + scrollView.contentOffset.y, screenHeight - fullTop)
         let rounded = max(0, height.rounded())
         guard rounded != lastReportedHeight else { return }
         lastReportedHeight = rounded
