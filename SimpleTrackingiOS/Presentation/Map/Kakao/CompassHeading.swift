@@ -8,16 +8,13 @@ import UIKit
 /// - iOS는 센서 융합·떨림 보정·진북 변환을 OS가 해 준다. 진북(`trueHeading`)은 위치 권한이
 ///   있어야 나오고, 없으면 음수라 자북(`magneticHeading`)을 쓴다.
 /// - `headingFilter`로 1° 넘게 바뀔 때만 받는다.
-/// - 시뮬레이터에는 나침반이 없어서, 시뮬레이터 빌드에서만 천천히 도는 가짜 방향을 보낸다(화면 확인용).
+/// - 시뮬레이터에는 나침반이 없어서, 시뮬레이터 빌드에서만 북쪽(0°)을 한 번 보낸다(화살촉·콘이 그려지는지 확인용).
 @MainActor
 final class CompassHeading: NSObject {
     private let manager = CLLocationManager()
     private let onHeading: (Double) -> Void
     private var isRunning = false
     private var orientationObserver: NSObjectProtocol?
-    /// 시뮬레이터 전용 가짜 나침반 타이머. 실기기 빌드에서는 늘 nil.
-    private var simulatedTimer: Timer?
-    private var simulatedDegrees = 0.0
 
     init(onHeading: @escaping (Double) -> Void) {
         self.onHeading = onHeading
@@ -40,8 +37,6 @@ final class CompassHeading: NSObject {
 
     func stop() {
         guard isRunning else { return }
-        simulatedTimer?.invalidate()
-        simulatedTimer = nil
         manager.stopUpdatingHeading()
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         orientationObserver.map(NotificationCenter.default.removeObserver)
@@ -62,17 +57,11 @@ final class CompassHeading: NSObject {
         }
     }
 
-    /// 시뮬레이터에는 나침반이 없어 콘·회전 모드를 볼 수 없다. 화면 확인용으로 12초에 한 바퀴 도는 가짜 방향을 보낸다.
+    /// 시뮬레이터에는 나침반이 없어 화살촉·콘을 볼 수 없다. 북쪽을 한 번만 보낸다.
+    /// 예전에는 12초에 한 바퀴 돌렸는데 마커가 계속 빙빙 돌아 거슬렸다.
     /// `#if targetEnvironment(simulator)` 안에서만 불려서 실기기 앱에는 영향이 없다.
     private func startSimulatedHeading() {
-        onHeading(simulatedDegrees)
-        simulatedTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.simulatedDegrees = (self.simulatedDegrees + 3).truncatingRemainder(dividingBy: 360)
-                self.onHeading(self.simulatedDegrees)
-            }
-        }
+        onHeading(0)
         isRunning = true
     }
 
