@@ -127,7 +127,7 @@ private struct TransitSegmentBar: View {
                 ForEach(Array(legs.enumerated()), id: \.offset) { _, leg in
                     let width = max(14, available * CGFloat(leg.durationSeconds) / CGFloat(total))
                     Capsule()
-                        .fill(RouteColors.leg(leg.kind).opacity(leg.kind == .walk ? 0.45 : 1))
+                        .fill(RouteColors.leg(leg).opacity(leg.kind == .walk ? 0.45 : 1))
                         .frame(width: width)
                         .overlay {
                             if width > 36 {
@@ -154,7 +154,7 @@ private struct TransitLegLine: View {
                 .font(.caption)
                 .foregroundStyle(.white)
                 .frame(width: 22, height: 22)
-                .background(RouteColors.leg(leg.kind), in: Circle())
+                .background(RouteColors.leg(leg), in: Circle())
 
             Text(leg.lineNames.isEmpty ? leg.guidance : leg.lineNames.joined(separator: ", "))
                 .font(.subheadline.weight(.semibold))

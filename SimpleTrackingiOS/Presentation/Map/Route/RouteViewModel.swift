@@ -57,7 +57,8 @@ final class RouteViewModel {
             return RouteOverlay(lines: [RouteLine(kind: kind, points: route.points)], start: origin, end: end)
         case .transit:
             guard let route = selectedTransitRoute else { return nil }
-            var lines = route.legs.map { RouteLine(kind: Self.lineKind($0.kind), points: $0.points) }
+            // 지하철은 노선 색(예: 2호선 초록)으로 그린다. 모르는 노선이면 기본 색.
+            var lines = route.legs.map { RouteLine(kind: Self.lineKind($0.kind), points: $0.points, rgb: SubwayLineColors.rgb(of: $0)) }
             // 대중교통 응답은 첫 정류장부터 시작하므로, 출발지·도착지와 이어지는 도보 구간을 직선으로 덧붙인다.
             if let first = lines.first?.points.first, first != origin {
                 lines.insert(RouteLine(kind: .walk, points: [origin, first]), at: 0)

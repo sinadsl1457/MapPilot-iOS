@@ -25,6 +25,7 @@ final class KakaoMapController: NSObject {
         static let placeLayer = "places"
         static let routeLayer = "route"
         static func routeStyle(_ kind: RouteLine.Kind) -> String { "route.style.\(kind)" }
+        static func routeStyle(rgb: UInt32) -> String { "route.style.color.\(String(rgb, radix: 16))" }
         static let routeEndpointLayer = "route.endpoints"
         static let routeStartPoi = "route.start"
         static let routeEndPoi = "route.end"
@@ -59,6 +60,7 @@ final class KakaoMapController: NSObject {
     /// 마지막으로 옮긴 내 위치. 다음 위치까지 거리로 애니메이션 여부를 정한다.
     private var myLocationPoint: GeoPoint?
     private var registeredPlaceStyles: Set<String> = []
+    private var registeredRouteColors: Set<UInt32> = []
     private var shownPlaceMarkers: [PlaceMarker] = []
     private var shownSelectedPlaceID: String?
     private var placeTapHandlers: [any DisposableEventHandler] = []
@@ -232,6 +234,19 @@ final class KakaoMapController: NSObject {
             let icon = PoiIconStyle(symbol: PlaceMarkerImages.pin(number: number, selected: selected), anchorPoint: CGPoint(x: 0.5, y: 1))
             labelManager.addPoiStyle(PoiStyle(styleID: id, styles: [PerLevelPoiStyle(iconStyle: icon, level: 0)]))
             registeredPlaceStyles.insert(id)
+        }
+        return id
+    }
+
+    /// 색이 지정된 선(지하철 노선 색)은 그 색의 스타일을 처음 볼 때 등록한다.
+    private func routeStyleID(for line: RouteLine, routeManager: RouteManager) -> String {
+        guard let rgb = line.rgb else { return ID.routeStyle(line.kind) }
+        let id = ID.routeStyle(rgb: rgb)
+        if !registeredRouteColors.contains(rgb) {
+            routeManager.addRouteStyleSet(RouteStyleSet(styleID: id, styles: [
+                RouteStyle(styles: [PerLevelRouteStyle(width: 8, color: UIColor(rgb: rgb), strokeWidth: 2, strokeColor: .white, level: 0)]),
+            ]))
+            registeredRouteColors.insert(rgb)
         }
         return id
     }
@@ -462,7 +477,8 @@ extension KakaoMapController: KakaoMapCommands {
         // 지우기가 비동기라 같은 ID를 바로 다시 쓰면 충돌할 수 있어 그릴 때마다 새 ID를 쓴다.
         routeDrawCount += 1
         for (index, line) in overlay.lines.enumerated() where line.points.count >= 2 {
-            let options = RouteOptions(routeID: "route.\(routeDrawCount).\(index)", styleID: ID.routeStyle(line.kind), zOrder: index)
+            let styleID = routeStyleID(for: line, routeManager: map.getRouteManager())
+            let options = RouteOptions(routeID: "route.\(routeDrawCount).\(index)", styleID: styleID, zOrder: index)
             options.segments = [RouteSegment(points: line.points.map(Self.mapPoint), styleIndex: 0)]
             routeLayer.addRoute(option: options)?.show()
         }

@@ -17,6 +17,8 @@ struct RouteLine: Equatable, Sendable {
 
     let kind: Kind
     let points: [GeoPoint]
+    /// 종류 기본색 대신 쓸 색(0xRRGGBB). 지하철 노선 색(예: 2호선 초록).
+    var rgb: UInt32? = nil
 }
 
 /// 지도에 그릴 경로 전체: 선들과 출발·도착 마커 위치.

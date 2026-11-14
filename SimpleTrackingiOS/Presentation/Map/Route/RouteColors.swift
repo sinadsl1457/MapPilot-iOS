@@ -14,12 +14,29 @@ enum RouteColors {
     static let start = Color(uiColor: RouteLineColors.car)
     static let end = Color(uiColor: RouteLineColors.end)
 
+    /// 구간 색. 지하철은 노선 색, 모르는 노선이면 종류 기본색. 지도 경로선과 같은 색이다.
+    static func leg(_ leg: TransitLeg) -> Color {
+        SubwayLineColors.rgb(of: leg).map { Color(uiColor: UIColor(rgb: $0)) } ?? Self.leg(leg.kind)
+    }
+
     static func leg(_ kind: TransitLeg.Kind) -> Color {
         switch kind {
         case .walk: Color(uiColor: RouteLineColors.walk)
         case .bus: Color(uiColor: RouteLineColors.bus)
         case .subway: Color(uiColor: RouteLineColors.subway)
         }
+    }
+}
+
+extension UIColor {
+    /// 0xRRGGBB → 불투명 색
+    convenience init(rgb: UInt32) {
+        self.init(
+            red: CGFloat((rgb >> 16) & 0xFF) / 255,
+            green: CGFloat((rgb >> 8) & 0xFF) / 255,
+            blue: CGFloat(rgb & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
 
