@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// 자동차·도보 길찾기 하단 카드: 예상 시간, 거리, 도착 예정 시각.
+/// 지도에서 경로를 보는 중의 하단 카드. 자동차·도보: 예상 시간, 거리, 도착 예정 시각, 요금.
+/// 대중교통: 목록에서 고른 `transitIndex`번째 경로 한 줄.
 struct RouteSummaryCard: View {
     let mode: TravelMode
     let result: RouteViewModel.ModeResult?
+    var transitIndex = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -34,6 +36,9 @@ struct RouteSummaryCard: View {
             case let .failed(error):
                 RouteFailureText(error: error)
                     .frame(height: 60, alignment: .leading)
+            case let .transit(routes) where routes.indices.contains(transitIndex):
+                TransitRouteRow(route: routes[transitIndex], isSelected: false)
+                    .padding(.horizontal, -20)
             case .loading, .transit, nil:
                 HStack(spacing: 10) {
                     ProgressView()

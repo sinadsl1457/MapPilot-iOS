@@ -61,6 +61,8 @@ final class PlaceSearchViewModel {
     @ObservationIgnored private let searchPlaces: SearchPlacesUseCase
     @ObservationIgnored private let searchPlacesByCategory: SearchPlacesByCategoryUseCase
     @ObservationIgnored private let recentSearches: RecentSearchesUseCase
+    /// 상세를 본 장소는 길찾기 준비 화면의 "최근 장소"에 남긴다.
+    @ObservationIgnored private let recentPlaces: RecentPlacesUseCase
     /// 늦게 도착한 이전 검색 결과가 최신 결과를 덮어쓰지 않게 한다.
     @ObservationIgnored private var generation = 0
     /// 실시간 검색: 입력이 이만큼 멈추면 요청한다(글자마다 요청하지 않게).
@@ -72,11 +74,13 @@ final class PlaceSearchViewModel {
         searchPlaces: SearchPlacesUseCase,
         searchPlacesByCategory: SearchPlacesByCategoryUseCase,
         recentSearches: RecentSearchesUseCase,
+        recentPlaces: RecentPlacesUseCase,
         suggestDelay: Duration = .milliseconds(300)
     ) {
         self.searchPlaces = searchPlaces
         self.searchPlacesByCategory = searchPlacesByCategory
         self.recentSearches = recentSearches
+        self.recentPlaces = recentPlaces
         self.suggestDelay = suggestDelay
         (effects, effectContinuation) = AsyncStream.makeStream()
     }
@@ -206,9 +210,11 @@ final class PlaceSearchViewModel {
 
     // MARK: - 결과·선택
 
+    /// 결과 목록에서 장소 탭(또는 지도 핀 탭). 상세를 보여주고(effect focus로 카메라 이동) 최근 장소에 남긴다.
     func select(_ place: Place) {
         selectedPlace = place
         effectContinuation.yield(.focus(place.location))
+        Task { [recentPlaces] in await recentPlaces.add(place) }
     }
 
     /// 지도 마커를 탭했을 때.

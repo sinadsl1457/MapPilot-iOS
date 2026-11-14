@@ -11,13 +11,26 @@ struct PlaceSearchViewModelTests {
 
     private func makeViewModel(
         places: FakePlaceRepository,
-        recents: FakeRecentSearchRepository = FakeRecentSearchRepository()
+        recents: FakeRecentSearchRepository = FakeRecentSearchRepository(),
+        recentPlaces: FakeRecentPlaceRepository = FakeRecentPlaceRepository()
     ) -> PlaceSearchViewModel {
         PlaceSearchViewModel(
             searchPlaces: SearchPlacesUseCase(repository: places),
             searchPlacesByCategory: SearchPlacesByCategoryUseCase(repository: places),
-            recentSearches: RecentSearchesUseCase(repository: recents)
+            recentSearches: RecentSearchesUseCase(repository: recents),
+            recentPlaces: RecentPlacesUseCase(repository: recentPlaces)
         )
+    }
+
+    @Test func selectedPlaceIsKeptInRecentPlaces() async throws {
+        let recentPlaces = FakeRecentPlaceRepository()
+        let viewModel = makeViewModel(places: FakePlaceRepository(result: places), recentPlaces: recentPlaces)
+
+        viewModel.select(places[1])
+        // 기록은 화면을 막지 않게 뒤에서 한다.
+        while await recentPlaces.stored.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+
+        #expect(await recentPlaces.stored.map(\.place.id) == ["2"])
     }
 
     // MARK: - 키워드
@@ -201,6 +214,7 @@ struct PlaceSearchSuggestionTests {
             searchPlaces: SearchPlacesUseCase(repository: repository),
             searchPlacesByCategory: SearchPlacesByCategoryUseCase(repository: repository),
             recentSearches: RecentSearchesUseCase(repository: recents),
+            recentPlaces: RecentPlacesUseCase(repository: FakeRecentPlaceRepository()),
             suggestDelay: delay
         )
     }

@@ -21,7 +21,9 @@ struct SimpleTrackingApp: App {
                 kakaoNativeAppKey: container.secrets.kakaoNativeAppKey,
                 viewModel: mapViewModel,
                 search: placeSearchViewModel,
-                route: routeViewModel
+                route: routeViewModel,
+                makeRoutePlanner: { [container] mode in container.makeRoutePlannerViewModel(mode: mode) },
+                makeEndpointSearch: { [container] in container.makeEndpointSearchViewModel() }
             )
         }
     }

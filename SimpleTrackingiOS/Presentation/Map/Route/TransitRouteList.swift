@@ -20,10 +20,11 @@ struct TransitRouteListHeader: View {
     }
 }
 
-/// 대중교통 경로 후보 목록. 하나를 고르면 지도에 그 경로를 그린다.
+/// 대중교통 경로 후보 목록(RouteListPage). 하나를 고르면 지도에 그 경로를 그린다.
 struct TransitRouteList: View {
     let result: RouteViewModel.ModeResult?
-    let selectedIndex: Int
+    /// 강조할 경로. nil이면 강조하지 않는다.
+    let selectedIndex: Int?
     let onSelect: (Int) -> Void
 
     var body: some View {
@@ -57,7 +58,8 @@ struct TransitRouteList: View {
     }
 }
 
-private struct TransitRouteRow: View {
+/// 대중교통 경로 한 줄. 목록과 지도 위 요약 카드(RouteSummaryCard)가 같이 쓴다.
+struct TransitRouteRow: View {
     let route: TransitRoute
     let isSelected: Bool
 

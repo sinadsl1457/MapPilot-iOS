@@ -376,6 +376,17 @@
         }
       }
     },
+    "route.backToList": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "경로 목록"
+          }
+        }
+      }
+    },
     "route.close": {
       "extractionState": "manual",
       "localizations": {
@@ -383,6 +394,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "길찾기 종료"
+          }
+        }
+      }
+    },
+    "route.destination.change": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도착지 바꾸기"
+          }
+        }
+      }
+    },
+    "route.destination.placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도착지 입력"
           }
         }
       }
@@ -453,6 +486,17 @@
         }
       }
     },
+    "route.origin.change": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "출발지 바꾸기"
+          }
+        }
+      }
+    },
     "route.origin.myLocation": {
       "extractionState": "manual",
       "localizations": {
@@ -460,6 +504,61 @@
           "stringUnit": {
             "state": "translated",
             "value": "내 위치"
+          }
+        }
+      }
+    },
+    "route.origin.placeholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "출발지 입력"
+          }
+        }
+      }
+    },
+    "route.picker.destination": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "도착지"
+          }
+        }
+      }
+    },
+    "route.picker.origin": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "출발지"
+          }
+        }
+      }
+    },
+    "route.picker.placeholder %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ — 장소, 주소 검색"
+          }
+        }
+      }
+    },
+    "route.recentPlaces.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "최근 검색한 장소가 없어요"
           }
         }
       }
@@ -482,6 +581,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld개 정류장"
+          }
+        }
+      }
+    },
+    "route.swap": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "출발지와 도착지 바꾸기"
           }
         }
       }

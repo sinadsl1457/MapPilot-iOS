@@ -56,8 +56,9 @@ protocol KakaoMapCommands: AnyObject {
 final class KakaoMapState {
     /// 인증·지도 로드 실패 사유. nil이면 정상.
     private(set) var loadFailure: String?
-    /// 지도 화면 중심 좌표. 카메라가 멈출 때마다 갱신된다.
+    /// 지도 화면 중심 좌표와 줌. 카메라가 멈출 때마다 갱신된다.
     @ObservationIgnored private(set) var cameraCenter: GeoPoint?
+    @ObservationIgnored private(set) var cameraZoom: Int?
     /// 사용자가 검색 결과 마커를 탭했을 때(장소 id).
     @ObservationIgnored var onPlaceTapped: ((String) -> Void)?
     /// 사용자가 손으로 지도를 드래그하거나 돌렸을 때. 코드로 옮긴 카메라는 오지 않는다.
@@ -142,8 +143,9 @@ final class KakaoMapState {
         loadFailure = reason
     }
 
-    func cameraDidStop(at center: GeoPoint) {
+    func cameraDidStop(at center: GeoPoint, zoom: Int) {
         cameraCenter = center
+        cameraZoom = zoom
     }
 
     func placeMarkerTapped(id: String) {

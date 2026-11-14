@@ -1,21 +1,35 @@
 import SwiftUI
 
+/// 지도 화면 = 앱의 메인 화면. 내 위치·검색·길찾기 ViewModel을 지도와 UI에 연결한다.
+/// 지도 반영 통로: 상태 변화는 onChange, 일회성 이벤트는 effects 스트림.
+/// 길찾기 흐름: 길찾기 버튼 → 준비 화면(RoutePlannerPage) → 경로 목록(RouteListPage, 대중교통) → 고른 경로를 지도에.
+/// 자동차·도보는 목록 없이 바로 지도에 그린다.
 struct MapScreen: View {
     let kakaoNativeAppKey: String
     let viewModel: MapViewModel
     let search: PlaceSearchViewModel
     let route: RouteViewModel
+    /// 길찾기 준비 화면이 열릴 때마다 새로 만든다. 인자는 지난 길찾기에서 고른 이동 수단.
+    let makeRoutePlanner: (TravelMode) -> RoutePlannerViewModel
+    /// 출발지·도착지 선택 페이지가 열릴 때마다 새로 만든다.
+    let makeEndpointSearch: () -> EndpointSearchViewModel
 
     @State private var mapState = KakaoMapState()
     @State private var toastMessage: String?
     @State private var sheetDetent: BottomSheetDetent = .medium
     @State private var sheetHeight: CGFloat = 0
     @State private var routeCardHeight: CGFloat = 0
-    @State private var transitSheetDetent: BottomSheetDetent = .medium
     /// 상단 UI(검색창·칩 또는 길찾기 카드·탭)의 높이. 카메라를 맞출 때 위쪽 여백이 된다.
     @State private var topControlsHeight: CGFloat = 0
     /// 화면 높이와 위·아래 안전 영역. 카메라 여백 계산에 쓴다(지도는 안전 영역까지 덮는다).
     @State private var screen = ScreenMetrics()
+    @State private var isPlannerPresented = false
+    /// 준비 화면에서 정한 길찾기. 준비 화면이 다 닫힌 뒤 찾는다(닫히는 중에 목록을 띄우면 무시될 수 있다).
+    @State private var pendingPlan: RoutePlan?
+    /// 자동차·도보 경로를 보는 중 출발지·도착지 줄을 눌러 여는 선택 페이지.
+    @State private var pickingOnMap: EndpointRole?
+    /// 길찾기를 시작하기 직전의 카메라. 길찾기가 끝나면 여기로 돌아간다.
+    @State private var cameraBeforeRoute: (center: GeoPoint, zoom: Int)?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.openURL) private var openURL
 
@@ -41,6 +55,23 @@ struct MapScreen: View {
         } message: {
             Text("permission.alert.message")
         }
+        .fullScreenCover(item: $pickingOnMap) { role in
+            EndpointPickerPage(
+                viewModel: makeEndpointSearch(),
+                title: role.title,
+                myLocation: myLocation,
+                onPick: { endpoint in
+                    pickingOnMap = nil
+                    Task {
+                        switch role {
+                        case .origin: await route.changeOrigin(endpoint, myLocation: myLocation)
+                        case .destination: await route.changeDestination(endpoint, myLocation: myLocation)
+                        }
+                    }
+                },
+                onBack: { pickingOnMap = nil }
+            )
+        }
         .task { await viewModel.onAppear() }
         .task { await search.onAppear() }
         .task { await consumeMapEffects() }
@@ -63,7 +94,16 @@ struct MapScreen: View {
             mapState.setFollowMode(mode)
         }
         .onChange(of: search.places) { syncPlaceMarkers() }
-        .onChange(of: route.isActive) { syncPlaceMarkers() }
+        .onChange(of: route.isActive) { _, isActive in
+            // 경로에 맞춰 줌 아웃하기 전에 지금 카메라를 기억해 두고, 길찾기가 끝나면 되돌린다.
+            if isActive {
+                cameraBeforeRoute = zip(mapState.cameraCenter, mapState.cameraZoom).map { (center: $0, zoom: $1) }
+            } else {
+                restoreCameraAfterRoute()
+            }
+            syncPlaceMarkers()
+        }
+        // 목록에서 경로를 고르거나 목록으로 돌아가면 지도 선을 다시 그린다(목록 단계는 선 없음).
         .onChange(of: route.overlay) { _, overlay in
             mapState.showRoute(overlay)
         }
@@ -89,16 +129,17 @@ struct MapScreen: View {
 
     // MARK: - 화면 구성
 
+    /// 아래에서 위 순서: 지도 → 로드 실패 안내 → 상단(검색창·칩 또는 길찾기 카드·탭)
+    /// → 하단(장소 시트 / 고른 경로 카드) → 내 위치 버튼 → 토스트 → 검색 페이지.
+    /// 준비 화면·경로 목록은 이 화면 위에 덮이는 전체 화면이다.
     private var content: some View {
         GeometryReader { geometry in
             let bottomSafeArea = geometry.safeAreaInsets.bottom
-            // 시트가 있으면 시트 윗변 위에, 없으면 화면 아래에 붙인다.
-            let floatingBottom = if route.isActive && route.selectedMode == .transit {
+            // 내 위치 버튼·토스트를 붙일 높이: 시트 윗변 위 → 경로 카드 위 → 화면 아래.
+            let floatingBottom = if isSheetVisible {
                 sheetHeight + 12
-            } else if route.isActive {
+            } else if route.isShowingRoute {
                 routeCardHeight + bottomSafeArea + 12
-            } else if isSheetVisible {
-                sheetHeight + 12
             } else {
                 bottomSafeArea + 24
             }
@@ -116,56 +157,22 @@ struct MapScreen: View {
                         .background(.background)
                 }
 
-                if let destination = route.destination {
-                    VStack(spacing: 8) {
-                        RouteHeader(destinationName: destination.name, onClose: closeRoute)
-                        TravelModeTabs(selected: route.selectedMode, results: route.results) { mode in
-                            withAnimation(.spring(duration: 0.3)) { route.selectMode(mode) }
-                        }
-                    }
-                    .padding(.horizontal, 16)
+                topControls
                     .padding(.top, 8)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topControlsHeight = $0 }
-                } else {
-                    VStack(spacing: 8) {
-                        MapSearchBar(
-                            keyword: search.keyword,
-                            showsClear: isSheetVisible,
-                            onTap: search.openSearchPage,
-                            onClear: search.clearResults
-                        )
-                        .padding(.horizontal, 16)
-
-                        CategoryChips(selected: search.selectedCategory) { category in
-                            Task { await search.toggleCategory(category, around: searchCenter) }
-                        }
-                    }
-                    .padding(.top, 8)
-                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { topControlsHeight = $0 }
-                }
 
                 if isSheetVisible {
                     BottomSheet(detent: $sheetDetent, visibleHeight: $sheetHeight) {
                         PlaceResultsHeader(viewModel: search)
                     } content: {
-                        PlaceResultsContent(viewModel: search, myLocation: viewModel.myLocation?.point, onRoute: startRoute)
+                        PlaceResultsContent(viewModel: search, myLocation: myLocation, onRoute: startRoute)
                     }
                     .ignoresSafeArea(edges: .bottom)
                     .transition(.move(edge: .bottom))
                 }
 
-                if route.isActive && route.selectedMode == .transit {
-                    BottomSheet(detent: $transitSheetDetent, visibleHeight: $sheetHeight, topReservedHeight: 160) {
-                        TransitRouteListHeader(result: route.selectedResult)
-                    } content: {
-                        TransitRouteList(result: route.selectedResult, selectedIndex: route.selectedTransitIndex) { index in
-                            route.selectTransitRoute(at: index)
-                        }
-                    }
-                    .ignoresSafeArea(edges: .bottom)
-                    .transition(.move(edge: .bottom))
-                } else if route.isActive {
-                    RouteSummaryCard(mode: route.selectedMode, result: route.selectedResult)
+                if route.isShowingRoute {
+                    RouteSummaryCard(mode: route.selectedMode, result: route.selectedResult, transitIndex: route.selectedTransitIndex)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { routeCardHeight = $0 }
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .transition(.move(edge: .bottom))
@@ -188,15 +195,79 @@ struct MapScreen: View {
             } action: { screen = $0 }
             .toast(message: $toastMessage, bottomInset: floatingBottom + 60 - bottomSafeArea)
             .animation(.spring(duration: 0.3), value: isSheetVisible)
-            .animation(.spring(duration: 0.3), value: route.isActive)
+            .animation(.spring(duration: 0.3), value: route.isShowingRoute)
             .animation(.spring(duration: 0.3), value: route.selectedMode)
             .overlay {
                 if search.isSearchPagePresented {
-                    SearchPage(viewModel: search, center: viewModel.myLocation?.point)
+                    SearchPage(viewModel: search, center: myLocation)
                         .transition(.opacity)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: search.isSearchPagePresented)
+            // 대중교통 경로 목록. 길찾기 중이고 지도에 경로를 보이지 않는 동안 덮는다.
+            // 경로를 고르면(isShowingRoute) 닫히고, ✕면 길찾기가 끝나(isActive 꺼짐) 닫힌다.
+            .fullScreenCover(isPresented: Binding(get: { route.isShowingList }, set: { _ in })) {
+                RouteListPage(route: route, myLocation: myLocation, makeEndpointSearch: makeEndpointSearch)
+            }
+        }
+        .fullScreenCover(isPresented: $isPlannerPresented, onDismiss: runPendingPlan) {
+            RoutePlannerPage(
+                viewModel: makeRoutePlanner(route.selectedMode),
+                myLocation: myLocation,
+                makeEndpointSearch: makeEndpointSearch,
+                onComplete: { plan in
+                    pendingPlan = plan
+                    isPlannerPresented = false
+                },
+                onClose: { isPlannerPresented = false }
+            )
+        }
+    }
+
+    /// 길찾기 중이 아니면 검색창·길찾기 버튼·칩, 자동차·도보 경로를 보는 중이면 출발·도착 카드와 이동 수단 탭,
+    /// 대중교통 경로를 보는 중이면 ‹ + "출발 → 도착".
+    @ViewBuilder
+    private var topControls: some View {
+        if route.isShowingRoute, route.selectedMode == .transit {
+            RouteShownBar(
+                originName: route.origin?.title ?? "",
+                destinationName: route.destination?.title ?? "",
+                onBack: route.backToList
+            )
+            .padding(.horizontal, 16)
+        } else if route.isShowingRoute {
+            VStack(spacing: 8) {
+                RouteHeader(
+                    originName: route.origin?.title,
+                    destinationName: route.destination?.title,
+                    onTapOrigin: { pickingOnMap = .origin },
+                    onTapDestination: { pickingOnMap = .destination },
+                    onSwap: { Task { await route.swap(myLocation: myLocation) } },
+                    onClose: route.close
+                )
+                // 대중교통 탭을 누르면 목록으로 간다.
+                TravelModeTabs(selected: route.selectedMode, results: route.results) { mode in
+                    withAnimation(.spring(duration: 0.3)) { route.selectMode(mode) }
+                }
+            }
+            .padding(.horizontal, 16)
+        } else {
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    MapSearchBar(
+                        keyword: search.keyword,
+                        showsClear: isSheetVisible,
+                        onTap: search.openSearchPage,
+                        onClear: search.clearResults
+                    )
+                    DirectionsButton { isPlannerPresented = true }
+                }
+                .padding(.horizontal, 16)
+
+                CategoryChips(selected: search.selectedCategory) { category in
+                    Task { await search.toggleCategory(category, around: searchCenter) }
+                }
+            }
         }
     }
 
@@ -208,28 +279,46 @@ struct MapScreen: View {
         )
     }
 
+    private var myLocation: GeoPoint? { viewModel.myLocation?.point }
+
     /// 카테고리 검색 기준: 지금 보고 있는 지도 중심 → 내 위치 → 기본 위치.
     private var searchCenter: GeoPoint {
-        mapState.cameraCenter ?? viewModel.myLocation?.point ?? KakaoMapController.defaultCenter
+        mapState.cameraCenter ?? myLocation ?? KakaoMapController.defaultCenter
     }
 
+    // MARK: - 길찾기
+
+    /// 장소 상세의 "길찾기". 내 위치에서 그 장소까지 찾는다(대중교통이면 목록이 뜬다).
     private func startRoute(to place: Place) {
         // 권한이 없으면 길찾기 대신 권한부터 요청한다.
         guard viewModel.hasLocationPermission else {
             viewModel.onMyLocationButtonTapped()
             return
         }
-        transitSheetDetent = .medium
-        Task { await route.start(to: place, from: viewModel.myLocation?.point) }
+        Task { await route.start(to: place, myLocation: myLocation) }
     }
 
-    private func closeRoute() {
-        route.close()
+    /// 준비 화면이 다 닫힌 뒤 정한 길찾기를 시작한다.
+    private func runPendingPlan() {
+        guard let plan = pendingPlan else { return }
+        pendingPlan = nil
+        Task { await route.plan(plan, myLocation: myLocation) }
+    }
+
+    /// 길찾기가 끝나면 카메라를 길찾기 시작 전 위치·줌으로 돌려준다(경로 전체를 보려고 줌 아웃한 채 남지 않게).
+    /// 길찾기 중에 따라가기를 켰더라도 끈다. 켜 두면 복원한 카메라를 트래킹이 다시 끌고 간다.
+    private func restoreCameraAfterRoute() {
         mapState.showRoute(nil)
-        if let place = search.selectedPlace {
+        let before = cameraBeforeRoute
+        cameraBeforeRoute = nil
+        if let before {
+            cameraAwayFromMe { mapState.moveCamera(to: before.center, zoom: before.zoom) }
+        } else if let place = search.selectedPlace {
             cameraAwayFromMe { mapState.moveCamera(to: place.location, zoom: 17) }
         }
     }
+
+    // MARK: - 지도 명령
 
     /// [points]가 위 UI와 아래 UI([bottomCovered]) 사이, 실제로 보이는 곳에 들어오게 맞춘다.
     /// 아래 시트는 펼쳐지는 중일 수 있어 지금 높이가 아니라 멈출 높이를 넘겨받는다.
@@ -239,7 +328,7 @@ struct MapScreen: View {
         cameraAwayFromMe { mapState.fitCamera(to: points, insets: insets) }
     }
 
-    /// 중간 높이로 멈춘 하단 시트(장소 결과·대중교통 목록)가 가리는 높이. BottomSheet의 medium과 같은 계산.
+    /// 중간 높이로 멈춘 장소 결과 시트가 가리는 높이. BottomSheet의 medium과 같은 계산.
     private var mediumSheetHeight: CGFloat {
         (screen.height + screen.safeBottom) * BottomSheetDetent.mediumRatio
     }
@@ -286,13 +375,10 @@ struct MapScreen: View {
         for await effect in route.effects {
             switch effect {
             case let .fitCamera(points):
-                if route.selectedMode == .transit {
-                    fitCamera(to: points, bottomCovered: mediumSheetHeight)
-                } else {
-                    // 경로 카드는 이 effect와 같은 상태 변경으로 이제 막 바뀐다. 다시 그려진 뒤의 실제 높이로 맞춘다.
-                    try? await Task.sleep(for: .milliseconds(50))
-                    fitCamera(to: points, bottomCovered: routeCardHeight + screen.safeBottom)
-                }
+                // 아래 경로 카드는 이 effect와 같은 상태 변경으로 이제 막 바뀐다(목록이 닫히는 중일 수도 있다).
+                // 다시 그려진 뒤의 실제 높이로 맞춘다.
+                try? await Task.sleep(for: .milliseconds(150))
+                fitCamera(to: points, bottomCovered: routeCardHeight + screen.safeBottom)
             case let .showError(error):
                 mapState.showRoute(nil)
                 toastMessage = error.userMessage
@@ -321,4 +407,9 @@ private struct ScreenMetrics: Equatable {
     var height: CGFloat = 0
     var safeTop: CGFloat = 0
     var safeBottom: CGFloat = 0
+}
+
+private func zip<A, B>(_ a: A?, _ b: B?) -> (A, B)? {
+    guard let a, let b else { return nil }
+    return (a, b)
 }

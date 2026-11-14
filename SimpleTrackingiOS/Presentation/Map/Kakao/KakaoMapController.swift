@@ -223,7 +223,7 @@ final class KakaoMapController: NSObject {
         guard let map else { return }
         let rect = map.viewRect
         let coordinate = map.getPosition(CGPoint(x: rect.midX, y: rect.midY)).wgsCoord
-        state.cameraDidStop(at: GeoPoint(latitude: coordinate.latitude, longitude: coordinate.longitude))
+        state.cameraDidStop(at: GeoPoint(latitude: coordinate.latitude, longitude: coordinate.longitude), zoom: map.zoomLevel)
     }
 
     private func placeStyleID(number: Int, selected: Bool, labelManager: LabelManager) -> String {
