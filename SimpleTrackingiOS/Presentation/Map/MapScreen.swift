@@ -44,9 +44,19 @@ struct MapScreen: View {
         .task { await consumeRouteEffects() }
         .onAppear {
             mapState.onPlaceTapped = { [search] id in search.selectPlace(id: id) }
+            mapState.onUserGesture = { [viewModel] gesture in
+                switch gesture {
+                case .pan: viewModel.onMapPanned()
+                case .rotate: viewModel.onMapRotated()
+                }
+            }
         }
         .onChange(of: viewModel.myLocation) { _, location in
             mapState.updateMyLocation(location)
+        }
+        // 따라가기 모드를 지도에 알린다. 카메라 추적은 SDK 트래킹이 한다.
+        .onChange(of: viewModel.followMode) { _, mode in
+            mapState.setFollowMode(mode)
         }
         .onChange(of: search.places) { syncPlaceMarkers() }
         .onChange(of: route.isActive) { syncPlaceMarkers() }
@@ -155,7 +165,11 @@ struct MapScreen: View {
                         .transition(.move(edge: .bottom))
                 }
 
-                MyLocationButton(hasPermission: viewModel.hasLocationPermission) {
+                MyLocationButton(
+                    hasPermission: viewModel.hasLocationPermission,
+                    followMode: viewModel.followMode,
+                    isCameraOnMyLocation: viewModel.isCameraOnMyLocation
+                ) {
                     viewModel.onMyLocationButtonTapped()
                 }
                 .padding(.trailing, 16)
@@ -204,8 +218,15 @@ struct MapScreen: View {
         route.close()
         mapState.showRoute(nil)
         if let place = search.selectedPlace {
-            mapState.moveCamera(to: place.location, zoom: 17)
+            cameraAwayFromMe { mapState.moveCamera(to: place.location, zoom: 17) }
         }
+    }
+
+    /// 내 위치가 아닌 곳(검색 결과, 경로)으로 카메라를 옮긴다. 따라가기를 먼저 꺼야
+    /// 트래킹이 카메라를 내 위치로 되돌리지 않는다.
+    private func cameraAwayFromMe(_ move: () -> Void) {
+        viewModel.stopFollowing()
+        move()
     }
 
     private func syncPlaceMarkers() {
@@ -226,7 +247,9 @@ struct MapScreen: View {
         for await effect in viewModel.effects {
             switch effect {
             case let .moveCamera(point, zoom):
-                mapState.moveCamera(to: point, zoom: zoom)
+                // 내 위치(첫 위치, 내 위치 버튼)는 애니메이션 없이 바로 놓는다.
+                // 멀리서 날아오면 어색하고, 긴 이동 애니메이션은 도중에 끊겨 엉뚱한 곳에 멈출 수 있다.
+                mapState.moveCamera(to: point, zoom: zoom, animated: false)
             case let .showError(error):
                 toastMessage = error.userMessage
             case let .showMessage(message):
@@ -241,7 +264,9 @@ struct MapScreen: View {
         for await effect in route.effects {
             switch effect {
             case let .fitCamera(points):
-                mapState.fitCamera(to: points, layout: route.selectedMode == .transit ? .routeWithSheet : .route)
+                cameraAwayFromMe {
+                    mapState.fitCamera(to: points, layout: route.selectedMode == .transit ? .routeWithSheet : .route)
+                }
             case let .showError(error):
                 mapState.showRoute(nil)
                 toastMessage = error.userMessage
@@ -255,9 +280,9 @@ struct MapScreen: View {
         for await effect in search.effects {
             switch effect {
             case let .fitCamera(points):
-                mapState.fitCamera(to: points, layout: .searchResults)
+                cameraAwayFromMe { mapState.fitCamera(to: points, layout: .searchResults) }
             case let .focus(point):
-                mapState.moveCamera(to: point, zoom: 17)
+                cameraAwayFromMe { mapState.moveCamera(to: point, zoom: 17) }
             case let .showError(error):
                 toastMessage = error.userMessage
             }

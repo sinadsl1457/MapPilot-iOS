@@ -266,13 +266,46 @@
         }
       }
     },
-    "map.myLocation.hint.authorized": {
+    "map.myLocation.hint.follow": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "내 위치를 따라갑니다"
+          }
+        }
+      }
+    },
+    "map.myLocation.hint.move": {
       "extractionState": "manual",
       "localizations": {
         "ko": {
           "stringUnit": {
             "state": "translated",
             "value": "지도를 현재 위치로 이동합니다"
+          }
+        }
+      }
+    },
+    "map.myLocation.hint.rotate": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "진행 방향으로 지도를 돌립니다"
+          }
+        }
+      }
+    },
+    "map.myLocation.hint.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "따라가기를 끕니다"
           }
         }
       }

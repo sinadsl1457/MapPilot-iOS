@@ -41,12 +41,15 @@ enum MapFitLayout: Equatable, Sendable {
 /// 지도에 내리는 명령. `KakaoMapController`가 구현하고, 테스트에서는 fake로 바꾼다.
 @MainActor
 protocol KakaoMapCommands: AnyObject {
-    func moveCamera(to point: GeoPoint, zoom: Int)
+    /// animated가 false면 애니메이션 없이 바로 놓는다(내 위치로 갈 때).
+    func moveCamera(to point: GeoPoint, zoom: Int, animated: Bool)
     func fitCamera(to points: [GeoPoint], layout: MapFitLayout)
     func updateMyLocation(_ location: UserLocation?)
     func showPlaceMarkers(_ markers: [PlaceMarker], selectedID: String?)
     /// 경로 선과 출발·도착 마커. nil이면 지운다.
     func showRoute(_ overlay: RouteOverlay?)
+    /// 카메라가 내 위치를 따라가게 한다. 실제 추적은 SDK 트래킹이 한다.
+    func setFollowMode(_ mode: FollowMode)
 }
 
 /// SwiftUI(선언형)와 지도 SDK(명령형) 사이의 다리.
@@ -60,6 +63,8 @@ final class KakaoMapState {
     @ObservationIgnored private(set) var cameraCenter: GeoPoint?
     /// 사용자가 검색 결과 마커를 탭했을 때(장소 id).
     @ObservationIgnored var onPlaceTapped: ((String) -> Void)?
+    /// 사용자가 손으로 지도를 드래그하거나 돌렸을 때. 코드로 옮긴 카메라는 오지 않는다.
+    @ObservationIgnored var onUserGesture: ((MapGesture) -> Void)?
 
     @ObservationIgnored private weak var map: (any KakaoMapCommands)?
     @ObservationIgnored private var pendingCamera: PendingCamera?
@@ -67,20 +72,21 @@ final class KakaoMapState {
     @ObservationIgnored private var placeMarkers: [PlaceMarker] = []
     @ObservationIgnored private var selectedPlaceID: String?
     @ObservationIgnored private var routeOverlay: RouteOverlay?
+    @ObservationIgnored private var followMode = FollowMode.none
 
     private enum PendingCamera {
-        case move(GeoPoint, zoom: Int)
+        case move(GeoPoint, zoom: Int, animated: Bool)
         case fit([GeoPoint], MapFitLayout)
     }
 
     var isMapReady: Bool { map != nil }
 
-    func moveCamera(to point: GeoPoint, zoom: Int) {
+    func moveCamera(to point: GeoPoint, zoom: Int, animated: Bool = true) {
         if let map {
-            map.moveCamera(to: point, zoom: zoom)
+            map.moveCamera(to: point, zoom: zoom, animated: animated)
         } else {
             // 준비 전에 여러 번 들어오면 마지막 명령만 의미가 있다.
-            pendingCamera = .move(point, zoom: zoom)
+            pendingCamera = .move(point, zoom: zoom, animated: animated)
         }
     }
 
@@ -109,16 +115,22 @@ final class KakaoMapState {
         map?.showRoute(overlay)
     }
 
+    func setFollowMode(_ mode: FollowMode) {
+        followMode = mode
+        map?.setFollowMode(mode)
+    }
+
     // MARK: - KakaoMapController 전용
 
     func attach(_ map: any KakaoMapCommands) {
         self.map = map
         loadFailure = nil
         map.updateMyLocation(myLocation)
+        map.setFollowMode(followMode)
         map.showPlaceMarkers(placeMarkers, selectedID: selectedPlaceID)
         map.showRoute(routeOverlay)
         switch pendingCamera {
-        case let .move(point, zoom): map.moveCamera(to: point, zoom: zoom)
+        case let .move(point, zoom, animated): map.moveCamera(to: point, zoom: zoom, animated: animated)
         case let .fit(points, layout): map.fitCamera(to: points, layout: layout)
         case nil: break
         }
@@ -139,5 +151,9 @@ final class KakaoMapState {
 
     func placeMarkerTapped(id: String) {
         onPlaceTapped?(id)
+    }
+
+    func userDidGesture(_ gesture: MapGesture) {
+        onUserGesture?(gesture)
     }
 }

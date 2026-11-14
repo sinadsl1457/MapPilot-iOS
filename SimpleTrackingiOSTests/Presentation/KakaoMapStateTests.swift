@@ -125,6 +125,37 @@ struct KakaoMapStateTests {
         #expect(map.routes.last == .some(nil))
     }
 
+    @Test func nonAnimatedMoveBeforeReadyKeepsFlag() {
+        let state = KakaoMapState()
+        state.moveCamera(to: Fixtures.cityHall, zoom: 17, animated: false)
+
+        let map = FakeMap()
+        state.attach(map)
+
+        #expect(map.cameraMoves.first?.animated == false)
+    }
+
+    @Test func followModeBeforeReadyIsReplayedOnAttach() {
+        let state = KakaoMapState()
+        state.setFollowMode(.followWithHeading)
+
+        let map = FakeMap()
+        state.attach(map)
+
+        #expect(map.followModes.last == .followWithHeading)
+    }
+
+    @Test func userGestureIsForwarded() {
+        let state = KakaoMapState()
+        var gestures: [MapGesture] = []
+        state.onUserGesture = { gestures.append($0) }
+
+        state.userDidGesture(.pan)
+        state.userDidGesture(.rotate)
+
+        #expect(gestures == [.pan, .rotate])
+    }
+
     @Test func attachClearsPreviousFailure() {
         let state = KakaoMapState()
         state.fail("인증 실패")
@@ -140,13 +171,18 @@ struct KakaoMapStateTests {
 
 @MainActor
 private final class FakeMap: KakaoMapCommands {
-    var cameraMoves: [(point: GeoPoint, zoom: Int)] = []
+    var cameraMoves: [(point: GeoPoint, zoom: Int, animated: Bool)] = []
+    var followModes: [FollowMode] = []
     var fits: [[GeoPoint]] = []
     var locations: [UserLocation?] = []
     var markerUpdates: [(markers: [PlaceMarker], selectedID: String?)] = []
 
-    func moveCamera(to point: GeoPoint, zoom: Int) {
-        cameraMoves.append((point, zoom))
+    func moveCamera(to point: GeoPoint, zoom: Int, animated: Bool) {
+        cameraMoves.append((point, zoom, animated))
+    }
+
+    func setFollowMode(_ mode: FollowMode) {
+        followModes.append(mode)
     }
 
     func fitCamera(to points: [GeoPoint], layout: MapFitLayout) {
