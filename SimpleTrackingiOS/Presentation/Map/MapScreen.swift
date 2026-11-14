@@ -136,8 +136,10 @@ struct MapScreen: View {
         GeometryReader { geometry in
             let bottomSafeArea = geometry.safeAreaInsets.bottom
             // 내 위치 버튼·토스트를 붙일 높이: 시트 윗변 위 → 경로 카드 위 → 화면 아래.
+            // 시트 위치는 중간 높이까지만 따른다. 시트를 끝까지 올리면 버튼은 숨기는데, 높이를 그대로 따르면
+            // 버튼 자리가 화면보다 커져 화면 전체가 늘어나고 → 시트가 더 높게 재고 → … 끝없이 커져 지도가 죽는다.
             let floatingBottom = if isSheetVisible {
-                sheetHeight + 12
+                min(sheetHeight, mediumSheetHeight) + 12
             } else if route.isShowingRoute {
                 routeCardHeight + bottomSafeArea + 12
             } else {
@@ -167,7 +169,7 @@ struct MapScreen: View {
                     } content: {
                         PlaceResultsContent(viewModel: search, myLocation: myLocation, onRoute: startRoute)
                     }
-                    .ignoresSafeArea(edges: .bottom)
+                    .ignoresSafeArea()
                     .transition(.move(edge: .bottom))
                 }
 
@@ -185,6 +187,9 @@ struct MapScreen: View {
                 ) {
                     viewModel.onMyLocationButtonTapped()
                 }
+                // 시트를 중간보다 높이 올리면 목록을 보는 중이라 숨긴다(버튼이 화면 위로 밀려 올라가지 않게).
+                .opacity(isSheetVisible && sheetHeight > mediumSheetHeight + 1 ? 0 : 1)
+                .animation(.easeOut(duration: 0.15), value: isSheetVisible && sheetHeight > mediumSheetHeight + 1)
                 .padding(.trailing, 16)
                 .padding(.bottom, floatingBottom)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)

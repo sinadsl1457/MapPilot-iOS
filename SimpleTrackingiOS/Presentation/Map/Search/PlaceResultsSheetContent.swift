@@ -58,17 +58,21 @@ struct PlaceResultsContent: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 24)
             case let .loaded(places):
-                List {
+                // 스크롤은 시트(BottomSheet)가 맡는다. List를 쓰면 목록이 따로 스크롤돼 시트가 끝까지 올라가지 않는다.
+                VStack(spacing: 0) {
                     ForEach(Array(places.enumerated()), id: \.element.id) { index, place in
                         Button {
                             viewModel.select(place)
                         } label: {
                             PlaceRow(number: index + 1, place: place, distance: DistanceText.string(from: myLocation, to: place.location))
+                                .padding(.horizontal, 20)
+                                .padding(.vertical, 8)
                         }
                         .buttonStyle(.plain)
+                        Divider().padding(.leading, 54)
                     }
                 }
-                .listStyle(.plain)
+                .padding(.bottom, 24)
             }
         }
     }
