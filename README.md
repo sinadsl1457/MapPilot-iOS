@@ -3,9 +3,9 @@
 카카오맵 SDK로 만든 지도 앱입니다. 내 위치 따라가기, 장소 검색, 자동차·도보·대중교통 길찾기를 네이버 지도와 비슷한 흐름으로 구현했습니다.
 같은 기능을 Android 네이티브로도 만들었습니다 → [MapPilot-Android](https://github.com/sinadsl1457/MapPilot-Android)
 
-| 지도·내 위치 | 장소 검색 | 길찾기 |
+| 지도·내 위치 | 장소 검색(카페) | 길찾기(대중교통) |
 |---|---|---|
-| <!-- docs/screenshots/map.png --> | <!-- docs/screenshots/search.png --> | <!-- docs/screenshots/route.png --> |
+| <img src="docs/screenshots/map.png" width="250"> | <img src="docs/screenshots/search.png" width="250"> | <img src="docs/screenshots/route.png" width="250"> |
 
 ## 주요 기능
 
